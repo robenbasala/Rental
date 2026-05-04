@@ -1,0 +1,136 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply min-h-screen antialiased font-sans text-slate-800;
+    /* Soft wash behind the translucent app shell */
+    background: linear-gradient(160deg, rgb(238 242 255) 0%, rgb(255 255 255) 45%, rgb(250 245 255) 100%);
+  }
+}
+
+@layer components {
+  /* Light translucent shell — not dark */
+  .app-shell {
+    @apply min-h-screen bg-white/45 text-slate-800 backdrop-blur-md;
+  }
+
+  .app-header {
+    @apply bg-brand-gradient text-white shadow-lg shadow-indigo-900/15;
+  }
+
+  .app-footer {
+    @apply border-t border-slate-200/70 bg-white/55 text-slate-700 backdrop-blur-xl;
+  }
+
+  .footer-link {
+    @apply text-indigo-700/90 transition hover:text-fuchsia-700;
+  }
+
+  .nav-link-main {
+    @apply rounded-xl px-2 py-1.5 text-sm font-medium text-white/90 transition hover:bg-white/15 hover:text-white;
+  }
+
+  .card {
+    @apply rounded-3xl border border-slate-200/70 bg-white/75 text-slate-900 shadow-lg shadow-indigo-900/5 backdrop-blur-md;
+  }
+
+  /*
+    Fixed-height media slot so portrait, landscape, or square photos all use the same
+    template; object-cover crops inside the box (no variable card image heights).
+  */
+  .product-media-frame {
+    @apply relative w-full min-w-0 shrink-0 overflow-hidden bg-slate-100/90;
+    height: 15.5rem;
+  }
+
+  @media (min-width: 640px) {
+    .product-media-frame {
+      height: 17rem;
+    }
+  }
+
+  @media (min-width: 1024px) {
+    .product-media-frame {
+      height: 18rem;
+    }
+  }
+
+  /* Taller slot on product detail page only */
+  .product-media-hero {
+    @apply relative w-full min-w-0 shrink-0 overflow-hidden bg-slate-100/90;
+    height: 18rem;
+  }
+
+  @media (min-width: 640px) {
+    .product-media-hero {
+      height: 22rem;
+    }
+  }
+
+  /*
+    Tailwind preflight sets img { max-width: 100%; height: auto } which fights
+    absolute “fill frame + object-cover” and can make wide photos look vertically stretched.
+  */
+  .product-media-img {
+    @apply absolute inset-0 block object-cover object-center;
+    width: 100% !important;
+    height: 100% !important;
+    max-width: none !important;
+    object-fit: cover !important;
+    object-position: center !important;
+  }
+
+  .brand-panel {
+    @apply relative overflow-hidden rounded-3xl bg-gradient-to-br from-indigo-600 via-violet-600 to-fuchsia-600 p-8 text-white shadow-2xl shadow-fuchsia-900/20;
+  }
+
+  .brand-strip {
+    @apply rounded-2xl bg-gradient-to-br from-indigo-600 via-violet-600 to-fuchsia-600 p-4 text-white shadow-lg shadow-indigo-900/15;
+  }
+
+  .section-title {
+    @apply text-2xl font-bold tracking-tight text-slate-900;
+  }
+
+  .section-subtitle {
+    @apply text-sm text-slate-600;
+  }
+
+  .input-on-light {
+    @apply w-full rounded-xl border border-slate-200 bg-white/90 px-3 py-2 text-slate-900 shadow-sm placeholder:text-slate-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/25;
+  }
+
+  .select-on-light {
+    @apply w-full rounded-xl border border-slate-200 bg-white/90 px-3 py-2 text-slate-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/25;
+  }
+
+  .input-glass {
+    @apply w-full rounded-xl border-0 bg-white/15 px-4 py-2.5 text-white placeholder:text-indigo-100/70 backdrop-blur-sm focus:outline-none focus:ring-2 focus:ring-white/40;
+  }
+
+  .btn-primary-on-brand {
+    @apply inline-flex items-center justify-center rounded-xl bg-white px-5 py-3 font-semibold text-indigo-700 shadow-md transition hover:bg-indigo-50;
+  }
+
+  .btn-secondary-on-brand {
+    @apply inline-flex items-center justify-center rounded-2xl border border-white/30 bg-white/10 px-5 py-3 font-semibold text-white backdrop-blur-sm transition hover:bg-white/20;
+  }
+
+  .btn-gradient {
+    @apply inline-flex items-center justify-center rounded-xl bg-gradient-to-r from-indigo-600 to-fuchsia-600 px-4 py-2 font-semibold text-white shadow-md transition hover:brightness-110;
+  }
+
+  .link-on-brand {
+    @apply font-semibold text-white underline decoration-white/60 underline-offset-2 transition hover:decoration-white;
+  }
+
+  .admin-title {
+    @apply mb-4 text-2xl font-bold tracking-tight text-slate-900;
+  }
+
+  .card-title {
+    @apply text-2xl font-bold tracking-tight text-slate-900;
+  }
+}
