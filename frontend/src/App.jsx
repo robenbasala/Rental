@@ -1,4 +1,4 @@
-import { Link, Route, Routes } from "react-router-dom";
+import { Link, NavLink, Route, Routes } from "react-router-dom";
 import AdminProtectedLayout from "./components/AdminProtectedLayout";
 import { useMemo, useState } from "react";
 import HomePage from "./pages/HomePage";
@@ -28,23 +28,23 @@ export default function App() {
   return (
     <div className="app-shell">
       <header className="app-header">
-        <div className="mx-auto max-w-6xl px-4 py-4 flex items-center justify-between">
-          <Link to="/" className="font-bold text-xl tracking-tight text-white drop-shadow-sm">
+        <div className="app-header-inner mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3.5 sm:py-4">
+          <NavLink to="/" end className="nav-brand drop-shadow-sm">
             Kids Party Rentals
-          </Link>
-          <nav className="flex flex-wrap items-center gap-1 sm:gap-2">
-            <Link to="/products" className="nav-link-main">
+          </NavLink>
+          <nav className="app-nav-pill max-w-[calc(100%-8rem)] justify-end sm:max-w-none">
+            <NavLink to="/products" className="nav-link-main">
               Products
-            </Link>
-            <Link to="/cart" className="nav-link-main">
+            </NavLink>
+            <NavLink to="/cart" className="nav-link-main">
               Cart ({cartCount})
-            </Link>
-            <Link to="/create-account" className="nav-link-main">
+            </NavLink>
+            <NavLink to="/create-account" end className="nav-link-main">
               Sign up
-            </Link>
-            <Link to="/account" className="nav-link-main">
+            </NavLink>
+            <NavLink to="/account" end className="nav-link-main">
               Account
-            </Link>
+            </NavLink>
           </nav>
         </div>
       </header>
@@ -102,8 +102,16 @@ export default function App() {
           </div>
           <div>
             <p className="font-semibold text-slate-900">Contact</p>
-            <p className="mt-2 text-slate-600">support@example.com</p>
-            <p className="text-slate-600">(732) 000-0000</p>
+            <p className="mt-2">
+              <a href="mailto:info@simchapro.com" className="footer-link">
+                info@simchapro.com
+              </a>
+            </p>
+            <p className="mt-1">
+              <a href="tel:+18482076312" className="footer-link">
+                (848) 207-6312
+              </a>
+            </p>
           </div>
         </div>
       </footer>

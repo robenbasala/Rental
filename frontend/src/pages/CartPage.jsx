@@ -101,7 +101,7 @@ export default function CartPage({ cart, setCart, booking }) {
                   key={item.equipmentId}
                   className="card flex flex-col overflow-hidden transition hover:border-indigo-200/60 sm:flex-row sm:gap-0"
                 >
-                  <div className="relative aspect-[4/5] w-full shrink-0 overflow-hidden bg-slate-100 sm:aspect-auto sm:h-44 sm:w-44 sm:rounded-l-3xl">
+                  <div className="relative aspect-[4/5] w-full shrink-0 overflow-hidden bg-white sm:aspect-auto sm:h-44 sm:w-44 sm:rounded-l-3xl">
                     <img
                       src={imageById[item.equipmentId] || FALLBACK_IMG}
                       alt=""

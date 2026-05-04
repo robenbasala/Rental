@@ -15,7 +15,7 @@ export default function EquipmentGrid() {
       {items.map((item) => (
         <article
           key={item.Id}
-          className="card flex h-full min-h-0 min-w-0 flex-col overflow-hidden transition hover:shadow-md"
+          className="card flex h-full min-h-0 min-w-0 flex-col self-stretch overflow-hidden transition hover:shadow-md"
         >
           <div className="product-media-frame">
             <img
@@ -25,13 +25,13 @@ export default function EquipmentGrid() {
               className="product-media-img"
             />
           </div>
-          <div className="flex flex-1 flex-col p-4">
+          <div className="flex min-h-0 flex-1 flex-col p-4">
             {item.CategoryName && (
               <span className="mb-2 inline-block rounded-full bg-orange-100 px-2 py-1 text-xs text-orange-700">
                 {item.CategoryName}
               </span>
             )}
-            <h3 className="font-semibold">{item.Name}</h3>
+            <h3 className="line-clamp-2 font-semibold leading-snug">{item.Name}</h3>
             <p className="mt-1 flex-1 text-sm text-slate-500">{item.Description || "Perfect for birthday fun."}</p>
             <div className="mt-auto flex items-center justify-between gap-2 border-t border-slate-100/80 pt-4">
               <span className="font-bold">${Number(item.PricePerRental).toFixed(2)}</span>

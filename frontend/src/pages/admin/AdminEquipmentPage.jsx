@@ -248,7 +248,7 @@ export default function AdminEquipmentPage() {
           <ul className="mt-4 divide-y divide-slate-100">
             {items.map((row) => (
               <li key={row.Id} className="py-3 flex gap-3 items-start">
-                <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-xl bg-slate-100">
+                <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-xl bg-white">
                   <img
                     src={row.PrimaryImageUrl || "https://images.unsplash.com/photo-1527529482837-4698179dc6ce?w=200&q=60"}
                     alt=""

@@ -17,7 +17,39 @@
   }
 
   .app-header {
-    @apply bg-brand-gradient text-white shadow-lg shadow-indigo-900/15;
+    @apply relative overflow-hidden border-b border-white/15 text-white;
+    background: linear-gradient(
+      125deg,
+      rgb(55 48 163) 0%,
+      rgb(91 33 182) 38%,
+      rgb(126 34 206) 72%,
+      rgb(147 51 234) 100%
+    );
+    box-shadow:
+      0 1px 0 rgb(255 255 255 / 0.12) inset,
+      0 12px 40px -12px rgb(49 46 129 / 0.45);
+  }
+
+  .app-header::after {
+    content: "";
+    @apply pointer-events-none absolute inset-0 opacity-40;
+    background: radial-gradient(120% 80% at 100% 0%, rgb(255 255 255 / 0.18) 0%, transparent 55%);
+  }
+
+  .app-header-inner {
+    @apply relative z-10;
+  }
+
+  .app-nav-pill {
+    @apply flex flex-wrap items-center gap-0.5 rounded-full border border-white/15 bg-black/15 p-1 shadow-inner shadow-black/10 backdrop-blur-md sm:gap-1;
+  }
+
+  .nav-brand {
+    @apply relative z-10 rounded-xl px-1 py-0.5 text-lg font-bold tracking-tight text-white transition hover:text-white;
+  }
+
+  .nav-brand[aria-current="page"] {
+    @apply bg-white/15 text-white ring-1 ring-white/25;
   }
 
   .app-footer {
@@ -29,7 +61,24 @@
   }
 
   .nav-link-main {
-    @apply rounded-xl px-2 py-1.5 text-sm font-medium text-white/90 transition hover:bg-white/15 hover:text-white;
+    @apply relative inline-flex items-center justify-center rounded-full px-3 py-2 text-sm font-semibold tracking-wide text-white/85 outline-none transition-all duration-200;
+    @apply focus-visible:ring-2 focus-visible:ring-white/50 focus-visible:ring-offset-2 focus-visible:ring-offset-transparent;
+  }
+
+  .nav-link-main:hover {
+    @apply text-white;
+    background-color: rgb(255 255 255 / 0.12);
+  }
+
+  .nav-link-main[aria-current="page"] {
+    @apply bg-white text-indigo-800 shadow-md ring-1 ring-white/90;
+    box-shadow:
+      0 4px 6px -1px rgb(30 27 75 / 0.12),
+      0 2px 4px -2px rgb(30 27 75 / 0.08);
+  }
+
+  .nav-link-main[aria-current="page"]:hover {
+    @apply bg-white text-indigo-900;
   }
 
   .card {
@@ -37,49 +86,46 @@
   }
 
   /*
-    Fixed-height media slot so portrait, landscape, or square photos all use the same
-    template; object-cover crops inside the box (no variable card image heights).
+    Fixed-height media slot; images use object-fit:contain (see img.product-media-img) so the
+    whole photo scales down to fit—no cropping, uniform card layout.
   */
   .product-media-frame {
-    @apply relative w-full min-w-0 shrink-0 overflow-hidden bg-slate-100/90;
+    @apply relative w-full min-w-0 flex-none overflow-hidden rounded-t-3xl bg-white;
     height: 15.5rem;
+    min-height: 15.5rem;
+    max-height: 15.5rem;
   }
 
   @media (min-width: 640px) {
     .product-media-frame {
       height: 17rem;
+      min-height: 17rem;
+      max-height: 17rem;
     }
   }
 
   @media (min-width: 1024px) {
     .product-media-frame {
       height: 18rem;
+      min-height: 18rem;
+      max-height: 18rem;
     }
   }
 
   /* Taller slot on product detail page only */
   .product-media-hero {
-    @apply relative w-full min-w-0 shrink-0 overflow-hidden bg-slate-100/90;
+    @apply relative w-full min-w-0 flex-none overflow-hidden rounded-t-3xl bg-white;
     height: 18rem;
+    min-height: 18rem;
+    max-height: 18rem;
   }
 
   @media (min-width: 640px) {
     .product-media-hero {
       height: 22rem;
+      min-height: 22rem;
+      max-height: 22rem;
     }
-  }
-
-  /*
-    Tailwind preflight sets img { max-width: 100%; height: auto } which fights
-    absolute “fill frame + object-cover” and can make wide photos look vertically stretched.
-  */
-  .product-media-img {
-    @apply absolute inset-0 block object-cover object-center;
-    width: 100% !important;
-    height: 100% !important;
-    max-width: none !important;
-    object-fit: cover !important;
-    object-position: center !important;
   }
 
   .brand-panel {
@@ -133,4 +179,23 @@
   .card-title {
     @apply text-2xl font-bold tracking-tight text-slate-900;
   }
+}
+
+/*
+  Unlayered so this beats Preflight. Full image visible, scaled proportionally inside the slot
+  (letterboxing uses the frame’s bg); no overflow past the container.
+*/
+img.product-media-img {
+  position: absolute !important;
+  left: 0 !important;
+  top: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  max-width: none !important;
+  max-height: none !important;
+  object-fit: contain !important;
+  object-position: center !important;
+  display: block !important;
 }

@@ -235,7 +235,7 @@ export default function CustomerAccountPage() {
                       key={it.Id}
                       className="flex gap-3 rounded-2xl border border-slate-100 bg-slate-50/50 p-3 transition group-hover:border-indigo-100"
                     >
-                      <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-xl bg-slate-100 shadow-sm">
+                      <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-xl bg-white shadow-sm">
                         <img
                           src={it.ImageUrl || FALLBACK_IMG}
                           alt=""
@@ -324,7 +324,7 @@ export default function CustomerAccountPage() {
                 <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                   {(inv.items || []).map((it) => (
                     <div key={it.Id} className="flex gap-3 rounded-2xl border border-slate-100 bg-slate-50/80 p-3">
-                      <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-lg bg-slate-100">
+                      <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-lg bg-white">
                         <img
                           src={it.ImageUrl || FALLBACK_IMG}
                           alt=""
