@@ -1,9 +1,9 @@
 import { Navigate, Outlet, useLocation } from "react-router-dom";
+import { hasAdminPanelAccess } from "../adminSession";
 
 export default function AdminProtectedLayout() {
   const location = useLocation();
-  const token = localStorage.getItem("adminToken");
-  if (!token) {
+  if (!hasAdminPanelAccess()) {
     return (
       <Navigate
         to="/admin/login"

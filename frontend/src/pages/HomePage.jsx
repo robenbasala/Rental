@@ -1,8 +1,22 @@
+import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
+import { api } from "../api";
 import BookingBar from "../components/BookingBar";
 import EquipmentGrid from "../components/EquipmentGrid";
 
+function formatPackagePrice(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return "—";
+  const hasCents = Math.round(n * 100) % 100 !== 0;
+  return hasCents ? `$${n.toFixed(2)}` : `$${Math.round(n)}`;
+}
+
 export default function HomePage({ cart, setCart, booking, setBooking }) {
+  const { data: packages = [], isLoading: packagesLoading } = useQuery({
+    queryKey: ["packages"],
+    queryFn: async () => (await api.get("/packages")).data
+  });
+
   const categories = [
     { title: "Bounce Houses", desc: "Castle, princess and sports themes for all ages." },
     { title: "Combo Units", desc: "Jump + slide + climb combos for nonstop fun." },
@@ -10,13 +24,6 @@ export default function HomePage({ cart, setCart, booking, setBooking }) {
     { title: "Concessions", desc: "Popcorn, cotton candy and snow cone machines." },
     { title: "Tables & Chairs", desc: "Simple seating packages for birthday parties." },
     { title: "Party Add-ons", desc: "Extra fun upgrades for larger events." }
-  ];
-
-  const packages = [
-    { name: "Package 1", price: "$360", items: "Large bounce + concession" },
-    { name: "Package 2", price: "$435", items: "Combo unit + concession" },
-    { name: "Package 3", price: "$460", items: "15ft water slide + concession" },
-    { name: "Package 4", price: "$600", items: "20ft water slide + concession" }
   ];
 
   const faqs = [
@@ -28,7 +35,7 @@ export default function HomePage({ cart, setCart, booking, setBooking }) {
 
   return (
     <div>
-      <section className="brand-panel mb-6">
+      <section className="brand-panel mb-6 !z-30 !overflow-visible !p-6">
         <p className="text-sm uppercase tracking-wide text-indigo-100">Fun. Fast. Reliable.</p>
         <h1 className="text-3xl md:text-5xl font-extrabold mt-2 tracking-tight">Kids Party Rentals Made Easy</h1>
         <p className="mt-3 max-w-2xl text-indigo-100">
@@ -43,9 +50,12 @@ export default function HomePage({ cart, setCart, booking, setBooking }) {
             Start Booking
           </Link>
         </div>
+        <BookingBar
+          booking={booking}
+          setBooking={setBooking}
+          className="booking-shell mt-5 p-3"
+        />
       </section>
-
-      <BookingBar booking={booking} setBooking={setBooking} />
 
       <section className="mb-8">
         <div className="mb-3 flex items-end justify-between gap-4">
@@ -74,18 +84,26 @@ export default function HomePage({ cart, setCart, booking, setBooking }) {
 
       <section className="mb-8">
         <h2 className="section-title mb-4">Party Packages</h2>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {packages.map((pkg) => (
-            <article key={pkg.name} className="card p-5">
-              <h3 className="font-semibold">{pkg.name}</h3>
-              <p className="mt-2 text-2xl font-extrabold text-indigo-700">{pkg.price}</p>
-              <p className="mt-2 text-sm text-slate-600">{pkg.items}</p>
-              <Link to="/checkout" className="btn-gradient mt-4 inline-block w-full text-center">
-                Book Package
-              </Link>
-            </article>
-          ))}
-        </div>
+        {packagesLoading && <p className="text-sm text-slate-500">Loading packages…</p>}
+        {!packagesLoading && packages.length === 0 && (
+          <p className="text-sm text-slate-500">No packages to show yet. Add them in Admin → Party packages.</p>
+        )}
+        {!packagesLoading && packages.length > 0 && (
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {packages.map((pkg) => (
+              <article key={pkg.Id} className="card p-5">
+                <h3 className="font-semibold">{pkg.Name}</h3>
+                <p className="mt-2 text-2xl font-extrabold text-indigo-700">{formatPackagePrice(pkg.Price)}</p>
+                {pkg.SummaryLine ? (
+                  <p className="mt-2 text-sm text-slate-600">{pkg.SummaryLine}</p>
+                ) : null}
+                <Link to="/checkout" className="btn-gradient mt-4 inline-block w-full text-center">
+                  Book Package
+                </Link>
+              </article>
+            ))}
+          </div>
+        )}
       </section>
 
       <section className="mb-8 grid gap-4 lg:grid-cols-2">

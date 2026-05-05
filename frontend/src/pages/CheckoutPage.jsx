@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { notifyAdminSessionChanged, notifyCustomerSessionChanged } from "../adminSession";
 import { api } from "../api";
 import { clearSignupPrefill, readSignupPrefill, writeSignupPrefill } from "../checkoutSignupPrefill";
 
@@ -21,6 +22,11 @@ export default function CheckoutPage({ cart, setCart, booking }) {
   const [quote, setQuote] = useState(null);
   const [loading, setLoading] = useState(false);
   const [payError, setPayError] = useState("");
+  const [addressSuggestions, setAddressSuggestions] = useState([]);
+  const [addressLoading, setAddressLoading] = useState(false);
+  const [showAddressSuggestions, setShowAddressSuggestions] = useState(false);
+  const [addressSuggestError, setAddressSuggestError] = useState("");
+  const [quoteError, setQuoteError] = useState("");
   const [paymentChoice, setPaymentChoice] = useState("stripe");
   const [hasSession, setHasSession] = useState(() => !!localStorage.getItem("customerToken"));
 
@@ -53,15 +59,47 @@ export default function CheckoutPage({ cart, setCart, booking }) {
   useEffect(() => {
     const run = async () => {
       if (!cart.length) return;
-      const res = await api.post("/cart/quote", {
-        items: cart,
-        deliveryMethod: form.deliveryMethod,
-        deliveryAddress: form.deliveryAddress
-      });
-      setQuote(res.data);
+      try {
+        const res = await api.post("/cart/quote", {
+          items: cart,
+          deliveryMethod: form.deliveryMethod,
+          deliveryAddress: form.deliveryAddress
+        });
+        setQuote(res.data);
+        setQuoteError("");
+      } catch {
+        setQuote(null);
+        setQuoteError("Could not calculate delivery for this address yet.");
+      }
     };
     run();
   }, [cart, form.deliveryMethod, form.deliveryAddress]);
+
+  useEffect(() => {
+    const query = String(form.deliveryAddress || "").trim();
+    if (form.deliveryMethod !== "Dropoff" || query.length < 3) {
+      setAddressSuggestions([]);
+      setAddressLoading(false);
+      setAddressSuggestError("");
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      setAddressLoading(true);
+      try {
+        const res = await api.get("/addresses/autocomplete", { params: { q: query } });
+        setAddressSuggestions(Array.isArray(res.data?.suggestions) ? res.data.suggestions : []);
+        setAddressSuggestError("");
+      } catch {
+        setAddressSuggestions([]);
+        setAddressSuggestError("Address suggestions unavailable. Enable Places API (New) for this key.");
+      } finally {
+        setAddressLoading(false);
+      }
+    }, 250);
+
+    return () => clearTimeout(timer);
+  }, [form.deliveryAddress, form.deliveryMethod]);
 
   const validateContact = () => {
     const errs = [];
@@ -209,6 +247,9 @@ export default function CheckoutPage({ cart, setCart, booking }) {
 
   const signOutCustomer = () => {
     localStorage.removeItem("customerToken");
+    localStorage.removeItem("adminToken");
+    notifyCustomerSessionChanged();
+    notifyAdminSessionChanged();
     setHasSession(false);
     queryClient.removeQueries({ queryKey: ["profile"] });
   };
@@ -314,12 +355,43 @@ export default function CheckoutPage({ cart, setCart, booking }) {
           </div>
 
           {form.deliveryMethod === "Dropoff" && (
-            <input
-              className="input-on-light mt-3"
-              placeholder="Delivery Address"
-              value={form.deliveryAddress}
-              onChange={(e) => setForm({ ...form, deliveryAddress: e.target.value })}
-            />
+            <div className="relative mt-3">
+              <input
+                className="input-on-light"
+                placeholder="Delivery Address (US)"
+                value={form.deliveryAddress}
+                onChange={(e) => {
+                  setForm({ ...form, deliveryAddress: e.target.value });
+                  setShowAddressSuggestions(true);
+                }}
+                onFocus={() => setShowAddressSuggestions(true)}
+                onBlur={() => setTimeout(() => setShowAddressSuggestions(false), 150)}
+                autoComplete="off"
+              />
+              {showAddressSuggestions && (addressLoading || addressSuggestions.length > 0) && (
+                <div className="absolute z-40 mt-1 w-full overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg">
+                  {addressLoading && (
+                    <p className="px-3 py-2 text-sm text-slate-500">Searching addresses…</p>
+                  )}
+                  {!addressLoading && addressSuggestions.map((s) => (
+                    <button
+                      key={s.placeId}
+                      type="button"
+                      className="block w-full border-b border-slate-100 px-3 py-2 text-left text-sm text-slate-700 hover:bg-indigo-50 last:border-b-0"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => {
+                        setForm({ ...form, deliveryAddress: s.description });
+                        setShowAddressSuggestions(false);
+                      }}
+                    >
+                      {s.description}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {addressSuggestError && <p className="mt-2 text-xs text-amber-600">{addressSuggestError}</p>}
+              {quoteError && <p className="mt-1 text-xs text-slate-500">{quoteError}</p>}
+            </div>
           )}
 
           <div className="mt-6 border-t border-slate-200 pt-4">
@@ -328,7 +400,7 @@ export default function CheckoutPage({ cart, setCart, booking }) {
               <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 p-3 has-[:checked]:border-indigo-500 has-[:checked]:bg-indigo-50/80">
                 <input type="radio" name="pay" checked={paymentChoice === "stripe"} onChange={() => setPaymentChoice("stripe")} className="mt-1" />
                 <span>
-                  <span className="font-medium">Pay now (Stripe)</span>
+                  <span className="font-medium">Pay Now</span>
                   <span className="block text-xs text-slate-500">Secure card payment — booking confirmed after payment.</span>
                 </span>
               </label>
@@ -343,13 +415,34 @@ export default function CheckoutPage({ cart, setCart, booking }) {
           </div>
         </section>
 
-        <aside className="brand-panel h-fit !p-5">
-          <h2 className="font-bold">Order summary</h2>
-          <p className="mt-2 text-sm text-indigo-100">Subtotal: ${quote?.subtotal?.toFixed?.(2) || "0.00"}</p>
-          <p className="text-sm text-indigo-100">Delivery: ${quote?.deliveryFee?.toFixed?.(2) || "0.00"}</p>
-          <p className="text-sm text-indigo-100">Tax: ${quote?.tax?.toFixed?.(2) || "0.00"}</p>
-          <p className="mt-2 text-lg font-bold">Total: ${quote?.total?.toFixed?.(2) || "0.00"}</p>
-          {!!quote?.distanceMiles && <p className="mt-1 text-xs text-indigo-100/80">Distance: {quote.distanceMiles} miles</p>}
+        <aside className="checkout-summary-panel h-fit">
+          <h2 className="text-base font-bold">Order summary</h2>
+          <div className="checkout-summary-list mt-3">
+            <div className="checkout-summary-row">
+              <span>Subtotal</span>
+              <strong>${quote?.subtotal?.toFixed?.(2) || "0.00"}</strong>
+            </div>
+            <div className="checkout-summary-row">
+              <span>Delivery</span>
+              <strong>${quote?.deliveryFee?.toFixed?.(2) || "0.00"}</strong>
+            </div>
+            <div className="checkout-summary-row">
+              <span>Tax</span>
+              <strong>${quote?.tax?.toFixed?.(2) || "0.00"}</strong>
+            </div>
+            <div className="checkout-summary-row checkout-summary-distance">
+              <span>Distance</span>
+              <strong>
+                {form.deliveryMethod === "Dropoff"
+                  ? `${quote?.distanceMiles?.toFixed?.(2) || "0.00"} miles`
+                  : "Pickup"}
+              </strong>
+            </div>
+            <div className="checkout-summary-row checkout-summary-total">
+              <span>Total</span>
+              <strong>${quote?.total?.toFixed?.(2) || "0.00"}</strong>
+            </div>
+          </div>
           {payError && <p className="mt-3 text-sm text-amber-200">{payError}</p>}
           {paymentChoice === "stripe" ? (
             <button
@@ -357,7 +450,7 @@ export default function CheckoutPage({ cart, setCart, booking }) {
               onClick={payWithStripe}
               className="btn-primary-on-brand mt-4 w-full py-2.5 text-sm disabled:opacity-50"
             >
-              {loading ? "Processing..." : "Pay with Stripe"}
+              {loading ? "Processing..." : "Pay Now"}
             </button>
           ) : (
             <button

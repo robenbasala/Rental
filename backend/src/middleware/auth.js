@@ -36,10 +36,17 @@ export function requireAdmin(req, res, next) {
 
   try {
     const payload = jwt.verify(token, env.jwtSecret);
-    if (payload.role !== "admin") {
+    const isDedicatedAdmin = payload.role === "admin";
+    const isCustomerAdmin =
+      payload.role === "customer" && (payload.isAdmin === true || payload.isAdmin === 1);
+    if (!isDedicatedAdmin && !isCustomerAdmin) {
       return res.status(403).json({ message: "Forbidden" });
     }
-    req.admin = payload;
+    const uid = payload.userId ?? payload.adminId;
+    if (uid == null) {
+      return res.status(403).json({ message: "Forbidden" });
+    }
+    req.admin = { ...payload, adminId: uid, userId: uid };
     next();
   } catch {
     res.status(401).json({ message: "Invalid token" });

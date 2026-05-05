@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import { hasAdminPanelAccess, notifyAdminSessionChanged } from "../../adminSession";
 import { api, setAuthToken } from "../../api";
 
 function safeAdminPostLoginPath(from) {
@@ -17,7 +18,7 @@ export default function AdminLoginPage() {
   const location = useLocation();
 
   useEffect(() => {
-    if (localStorage.getItem("adminToken")) {
+    if (hasAdminPanelAccess()) {
       const dest = safeAdminPostLoginPath(location.state?.from) || "/admin/dashboard";
       navigate(dest, { replace: true });
     }
@@ -31,6 +32,7 @@ export default function AdminLoginPage() {
       const res = await api.post("/admin/login", { email: email.trim(), password });
       localStorage.setItem("adminToken", res.data.token);
       setAuthToken(res.data.token);
+      notifyAdminSessionChanged();
       const dest = safeAdminPostLoginPath(location.state?.from) || "/admin/dashboard";
       navigate(dest, { replace: true });
     } catch (err) {

@@ -1,11 +1,12 @@
 import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { getTokenForAdminApi } from "../../adminSession";
 import { api, setAuthToken } from "../../api";
 import AdminNav from "../../components/AdminNav";
 
 export default function AdminDashboardPage() {
   useEffect(() => {
-    setAuthToken(localStorage.getItem("adminToken"));
+    setAuthToken(getTokenForAdminApi());
   }, []);
 
   const { data } = useQuery({

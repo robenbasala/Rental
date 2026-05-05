@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { getTokenForAdminApi } from "../../adminSession";
 import { api, setAuthToken } from "../../api";
 import AdminNav from "../../components/AdminNav";
 
@@ -9,7 +10,7 @@ export default function AdminReceivablesPage() {
   const [refs, setRefs] = useState({});
 
   useEffect(() => {
-    setAuthToken(localStorage.getItem("adminToken"));
+    setAuthToken(getTokenForAdminApi());
   }, []);
 
   const { data = [], isLoading } = useQuery({

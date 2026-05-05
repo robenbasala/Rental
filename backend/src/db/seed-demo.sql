@@ -91,19 +91,21 @@ IF @Eq5 IS NOT NULL AND NOT EXISTS (SELECT 1 FROM EquipmentImages WHERE Equipmen
 IF @Eq6 IS NOT NULL AND NOT EXISTS (SELECT 1 FROM EquipmentImages WHERE EquipmentId = @Eq6)
   INSERT INTO EquipmentImages (EquipmentId, ImageUrl, SortOrder) VALUES (@Eq6, 'https://images.unsplash.com/photo-1524429656589-6633a470097c?auto=format&fit=crop&w=1400&q=80', 0);
 
--- Default admin (login at /admin/login) — change password after first login
-IF NOT EXISTS (SELECT 1 FROM AdminUsers WHERE Email = 'admin@kidsrental.local')
-  INSERT INTO AdminUsers (Name, Email, PasswordHash, IsActive)
+-- Default admin user (login at /admin/login) — bcrypt hash for Admin123!
+IF NOT EXISTS (SELECT 1 FROM Users WHERE Email = 'admin@kidsrental.local')
+  INSERT INTO Users (Name, Email, Phone, PasswordHash, IsAdmin, IsActive)
   VALUES (
     'Demo Admin',
     'admin@kidsrental.local',
+    NULL,
     N'$2a$10$QgPrSD7Y.m3QBt0ltA5TlOpx4pVGAfLway/Ff5aBgoKJ1hucgcrCm',
+    1,
     1
   );
 
--- If admin exists but password was wrong / truncated in DB, force correct hash for demo password Admin123!
-UPDATE AdminUsers
+UPDATE Users
 SET PasswordHash = N'$2a$10$QgPrSD7Y.m3QBt0ltA5TlOpx4pVGAfLway/Ff5aBgoKJ1hucgcrCm',
+    IsAdmin = 1,
     IsActive = 1,
     UpdatedAt = SYSUTCDATETIME()
 WHERE Email = 'admin@kidsrental.local';

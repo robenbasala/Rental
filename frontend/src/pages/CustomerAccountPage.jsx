@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api";
+import { notifyAdminSessionChanged, notifyCustomerSessionChanged } from "../adminSession";
 
 const FALLBACK_IMG =
   "https://images.unsplash.com/photo-1527529482837-4698179dc6ce?auto=format&fit=crop&w=400&q=70";
@@ -69,6 +70,9 @@ export default function CustomerAccountPage() {
   useEffect(() => {
     if (profileError && session) {
       localStorage.removeItem("customerToken");
+      localStorage.removeItem("adminToken");
+      notifyCustomerSessionChanged();
+      notifyAdminSessionChanged();
       setSession(null);
       queryClient.removeQueries({ queryKey: ["profile"] });
       queryClient.removeQueries({ queryKey: ["my-orders"] });
@@ -78,6 +82,9 @@ export default function CustomerAccountPage() {
 
   const signOut = () => {
     localStorage.removeItem("customerToken");
+    localStorage.removeItem("adminToken");
+    notifyCustomerSessionChanged();
+    notifyAdminSessionChanged();
     setSession(null);
     queryClient.removeQueries({ queryKey: ["profile"] });
     queryClient.removeQueries({ queryKey: ["my-orders"] });
@@ -93,6 +100,7 @@ export default function CustomerAccountPage() {
         password: loginPassword
       });
       localStorage.setItem("customerToken", res.data.token);
+      notifyCustomerSessionChanged();
       setSession(res.data.token);
       setLoginPassword("");
       queryClient.invalidateQueries({ queryKey: ["profile"] });

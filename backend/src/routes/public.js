@@ -5,8 +5,8 @@ import jwt from "jsonwebtoken";
 import { getDb, sql } from "../config/db.js";
 import { env } from "../config/env.js";
 import { sendPasswordResetEmail } from "../services/emailService.js";
-import { calculateDistanceMiles } from "../services/mapsService.js";
-import { calculateTotals, round2 } from "../utils/pricing.js";
+import { autocompleteUsAddresses, calculateDistanceMiles } from "../services/mapsService.js";
+import { calculateTotals, computeDropoffDeliveryFee, round2 } from "../utils/pricing.js";
 import { normalizeSqlDate, normalizeSqlTime } from "../utils/sqlDateTime.js";
 import { createCheckoutSession, stripe } from "../services/stripeService.js";
 import { requireUser, requireCustomer } from "../middleware/auth.js";
@@ -31,7 +31,7 @@ async function buildQuote(db, { items, deliveryMethod, deliveryAddress }) {
 
   if (deliveryMethod === "Dropoff" && deliveryAddress) {
     distanceMiles = await calculateDistanceMiles(deliveryAddress);
-    deliveryFee = round2(distanceMiles * Number(settings.DeliveryPricePerMile));
+    deliveryFee = computeDropoffDeliveryFee(distanceMiles, settings);
   }
 
   const normalizedItems = [];
@@ -88,6 +88,21 @@ router.get("/equipment/:id", async (req, res) => {
   res.json(equipment.recordset[0]);
 });
 
+router.get("/packages", async (_req, res, next) => {
+  try {
+    const db = await getDb();
+    const result = await db.request().query(`
+      SELECT Id, Name, SummaryLine, Price, SortOrder
+      FROM RentalPackages
+      WHERE IsActive = 1
+      ORDER BY SortOrder ASC, Id ASC
+    `);
+    res.json(result.recordset);
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.post("/auth/register", [
   body("name").notEmpty(),
   body("password").isLength({ min: 4 }),
@@ -111,13 +126,21 @@ router.post("/auth/register", [
       .input("passwordHash", sql.NVarChar, hash)
       .query(`
       INSERT INTO Users (Name, Email, Phone, PasswordHash)
-      OUTPUT INSERTED.Id, INSERTED.Name, INSERTED.Email, INSERTED.Phone
+      OUTPUT INSERTED.Id, INSERTED.Name, INSERTED.Email, INSERTED.Phone, INSERTED.IsAdmin
       VALUES (@name, @email, @phone, @passwordHash)
     `);
 
     const user = result.recordset[0];
-    const token = jwt.sign({ userId: user.Id, role: "customer" }, env.jwtSecret, { expiresIn: env.jwtExpiresIn });
-    res.status(201).json({ token, user });
+    const isAdmin = !!user.IsAdmin;
+    const token = jwt.sign(
+      { userId: user.Id, role: "customer", isAdmin },
+      env.jwtSecret,
+      { expiresIn: env.jwtExpiresIn }
+    );
+    res.status(201).json({
+      token,
+      user: { id: user.Id, name: user.Name, email: user.Email, phone: user.Phone, isAdmin }
+    });
   } catch (err) {
     const msg = String(err.message || "");
     if (msg.includes("UNIQUE") || msg.includes("duplicate")) {
@@ -162,8 +185,16 @@ router.post("/auth/login", async (req, res) => {
   const ok = await bcrypt.compare(password || "", user.PasswordHash);
   if (!ok) return res.status(401).json({ message: "Invalid credentials" });
 
-  const token = jwt.sign({ userId: user.Id, role: "customer" }, env.jwtSecret, { expiresIn: env.jwtExpiresIn });
-  res.json({ token, user: { id: user.Id, name: user.Name, email: user.Email, phone: user.Phone } });
+  const isAdmin = !!user.IsAdmin;
+  const token = jwt.sign(
+    { userId: user.Id, role: "customer", isAdmin },
+    env.jwtSecret,
+    { expiresIn: env.jwtExpiresIn }
+  );
+  res.json({
+    token,
+    user: { id: user.Id, name: user.Name, email: user.Email, phone: user.Phone, isAdmin }
+  });
 });
 
 router.post("/auth/forgot-password", async (req, res) => {
@@ -234,13 +265,32 @@ router.post("/auth/reset-password", [
 });
 
 router.post("/delivery/calculate", async (req, res) => {
-  const db = await getDb();
-  const settings = await db.request().query("SELECT TOP 1 * FROM Settings");
-  const config = settings.recordset[0];
-  const miles = await calculateDistanceMiles(req.body.address);
-  const fee = round2(miles * Number(config.DeliveryPricePerMile));
-  const exceedsMax = miles > Number(config.MaxDeliveryDistanceMiles);
-  res.json({ miles, deliveryFee: fee, exceedsMax });
+  try {
+    const db = await getDb();
+    const settings = await db.request().query("SELECT TOP 1 * FROM Settings");
+    const config = settings.recordset[0];
+    const miles = await calculateDistanceMiles(req.body.address);
+    const fee = computeDropoffDeliveryFee(miles, config);
+    const exceedsMax = miles > Number(config.MaxDeliveryDistanceMiles);
+    res.json({ miles, deliveryFee: fee, exceedsMax });
+  } catch (error) {
+    console.error("Delivery calculate error", error);
+    res.status(400).json({ message: error.message || "Could not calculate delivery distance" });
+  }
+});
+
+router.get("/addresses/autocomplete", async (req, res) => {
+  try {
+    const q = String(req.query.q || "").trim();
+    if (!q || q.length < 3) {
+      return res.json({ suggestions: [] });
+    }
+    const suggestions = await autocompleteUsAddresses(q);
+    res.json({ suggestions });
+  } catch (error) {
+    console.error("Address autocomplete error", error);
+    res.status(400).json({ message: error.message || "Could not fetch address suggestions" });
+  }
 });
 
 router.post("/cart/quote", async (req, res) => {

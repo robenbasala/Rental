@@ -8,12 +8,18 @@ export default function ProductDetailsPage({ cart, setCart, booking, setBooking 
   const { id } = useParams();
   const navigate = useNavigate();
   const [form, setForm] = useState({
-    rentalDate: booking.rentalDate || "",
-    startTime: booking.startTime || "",
-    endTime: booking.endTime || "",
     quantity: 1
   });
   const [error, setError] = useState("");
+
+  const formatTime12 = (time) => {
+    if (!time) return "Not selected";
+    const [h, m] = String(time).split(":").map(Number);
+    if (Number.isNaN(h) || Number.isNaN(m)) return time;
+    const ampm = h >= 12 ? "PM" : "AM";
+    const hour = h % 12 || 12;
+    return `${hour}:${String(m).padStart(2, "0")} ${ampm}`;
+  };
 
   const { data: item } = useQuery({
     queryKey: ["equipment", id],
@@ -22,8 +28,8 @@ export default function ProductDetailsPage({ cart, setCart, booking, setBooking 
 
   const addToCart = () => {
     if (!item) return;
-    if (!form.rentalDate || !form.startTime || !form.endTime) {
-      setError("Please choose date, start time, and end time.");
+    if (!booking.rentalDate || !booking.startTime || !booking.endTime) {
+      setError("Please choose date/time from the booking picker at the top first.");
       return;
     }
     if (Number(form.quantity) < 1) {
@@ -32,9 +38,10 @@ export default function ProductDetailsPage({ cart, setCart, booking, setBooking 
     }
 
     setBooking({
-      rentalDate: form.rentalDate,
-      startTime: form.startTime,
-      endTime: form.endTime
+      rentalDate: booking.rentalDate,
+      startTime: booking.startTime,
+      endTime: booking.endTime,
+      durationHours: booking.durationHours || 4
     });
 
     const existing = cart.find((c) => c.equipmentId === item.Id);
@@ -67,26 +74,20 @@ export default function ProductDetailsPage({ cart, setCart, booking, setBooking 
 
       <article className="card p-5">
         <h2 className="text-xl font-bold">Choose Date & Time</h2>
-        <p className="text-sm text-slate-500 mt-1">Step 1: Select schedule, Step 2: Add to cart</p>
+        <p className="text-sm text-slate-500 mt-1">Schedule is set from the top booking picker. You can only choose quantity here.</p>
         <div className="mt-4 space-y-3">
-          <input
-            type="date"
-            className="input-on-light"
-            value={form.rentalDate}
-            onChange={(e) => setForm((v) => ({ ...v, rentalDate: e.target.value }))}
-          />
-          <input
-            type="time"
-            className="input-on-light"
-            value={form.startTime}
-            onChange={(e) => setForm((v) => ({ ...v, startTime: e.target.value }))}
-          />
-          <input
-            type="time"
-            className="input-on-light"
-            value={form.endTime}
-            onChange={(e) => setForm((v) => ({ ...v, endTime: e.target.value }))}
-          />
+          <div className="input-on-light bg-slate-50/90">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Date</p>
+            <p className="mt-1 font-medium text-slate-900">{booking.rentalDate || "Not selected"}</p>
+          </div>
+          <div className="input-on-light bg-slate-50/90">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Start Time</p>
+            <p className="mt-1 font-medium text-slate-900">{formatTime12(booking.startTime)}</p>
+          </div>
+          <div className="input-on-light bg-slate-50/90">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">End Time</p>
+            <p className="mt-1 font-medium text-slate-900">{formatTime12(booking.endTime)}</p>
+          </div>
           <input
             type="number"
             min={1}

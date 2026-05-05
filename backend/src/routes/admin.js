@@ -15,15 +15,19 @@ router.post("/login", async (req, res, next) => {
     const db = await getDb();
     const result = await db.request()
       .input("email", sql.NVarChar, String(email || "").trim())
-      .query("SELECT TOP 1 * FROM AdminUsers WHERE Email = @email AND IsActive = 1");
-    const admin = result.recordset[0];
-    if (!admin) return res.status(401).json({ message: "Invalid credentials" });
+      .query(`
+        SELECT TOP 1 Id, Name, Email, PasswordHash, IsAdmin, IsActive
+        FROM Users
+        WHERE Email = @email AND IsAdmin = 1 AND IsActive = 1
+      `);
+    const user = result.recordset[0];
+    if (!user) return res.status(401).json({ message: "Invalid credentials" });
 
-    const ok = await bcrypt.compare(password || "", admin.PasswordHash);
+    const ok = await bcrypt.compare(password || "", user.PasswordHash);
     if (!ok) return res.status(401).json({ message: "Invalid credentials" });
 
-    const token = jwt.sign({ adminId: admin.Id, role: "admin" }, env.jwtSecret, { expiresIn: env.jwtExpiresIn });
-    res.json({ token, admin: { id: admin.Id, name: admin.Name, email: admin.Email } });
+    const token = jwt.sign({ userId: user.Id, role: "admin" }, env.jwtSecret, { expiresIn: env.jwtExpiresIn });
+    res.json({ token, admin: { id: user.Id, name: user.Name, email: user.Email } });
   } catch (err) {
     next(err);
   }
@@ -169,19 +173,182 @@ router.delete("/categories/:id", async (req, res) => {
   res.json({ success: true });
 });
 
-router.get("/orders", async (req, res) => {
-  const db = await getDb();
-  const { status, date } = req.query;
-  let query = "SELECT * FROM Orders WHERE 1=1";
-  if (status) query += " AND OrderStatus = @status";
-  if (date) query += " AND RentalDate = @date";
-  query += " ORDER BY CreatedAt DESC";
+router.get("/packages", async (_req, res, next) => {
+  try {
+    const db = await getDb();
+    const result = await db.request().query(`
+      SELECT * FROM RentalPackages ORDER BY SortOrder ASC, Id ASC
+    `);
+    res.json(result.recordset);
+  } catch (err) {
+    next(err);
+  }
+});
 
-  const request = db.request();
-  if (status) request.input("status", sql.NVarChar, status);
-  if (date) request.input("date", sql.Date, date);
-  const result = await request.query(query);
-  res.json(result.recordset);
+router.post("/packages", async (req, res, next) => {
+  try {
+    const db = await getDb();
+    const { name, summaryLine, price, sortOrder, isActive } = req.body;
+    if (!String(name || "").trim()) {
+      return res.status(400).json({ message: "Name is required" });
+    }
+    const priceNum = Number(price);
+    if (!Number.isFinite(priceNum) || priceNum < 0) {
+      return res.status(400).json({ message: "Valid price is required" });
+    }
+    const result = await db.request()
+      .input("name", sql.NVarChar, String(name).trim())
+      .input("summaryLine", sql.NVarChar, summaryLine != null ? String(summaryLine).trim() || null : null)
+      .input("price", sql.Decimal(10, 2), priceNum)
+      .input("sortOrder", sql.Int, Number.isFinite(Number(sortOrder)) ? Number(sortOrder) : 0)
+      .input("isActive", sql.Bit, isActive ?? true)
+      .query(`
+        INSERT INTO RentalPackages (Name, SummaryLine, Price, SortOrder, IsActive)
+        OUTPUT INSERTED.*
+        VALUES (@name, @summaryLine, @price, @sortOrder, @isActive)
+      `);
+    res.status(201).json(result.recordset[0]);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.put("/packages/:id", async (req, res, next) => {
+  try {
+    const db = await getDb();
+    const id = Number(req.params.id);
+    const { name, summaryLine, price, sortOrder, isActive } = req.body;
+    if (!String(name || "").trim()) {
+      return res.status(400).json({ message: "Name is required" });
+    }
+    const priceNum = Number(price);
+    if (!Number.isFinite(priceNum) || priceNum < 0) {
+      return res.status(400).json({ message: "Valid price is required" });
+    }
+    await db.request()
+      .input("id", sql.Int, id)
+      .input("name", sql.NVarChar, String(name).trim())
+      .input("summaryLine", sql.NVarChar, summaryLine != null ? String(summaryLine).trim() || null : null)
+      .input("price", sql.Decimal(10, 2), priceNum)
+      .input("sortOrder", sql.Int, Number.isFinite(Number(sortOrder)) ? Number(sortOrder) : 0)
+      .input("isActive", sql.Bit, isActive ?? true)
+      .query(`
+        UPDATE RentalPackages
+        SET Name = @name, SummaryLine = @summaryLine, Price = @price, SortOrder = @sortOrder,
+            IsActive = @isActive, UpdatedAt = SYSUTCDATETIME()
+        WHERE Id = @id
+      `);
+    res.json({ success: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.delete("/packages/:id", async (req, res, next) => {
+  try {
+    const db = await getDb();
+    await db.request()
+      .input("id", sql.Int, Number(req.params.id))
+      .query("DELETE FROM RentalPackages WHERE Id = @id");
+    res.json({ success: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get("/orders", async (req, res, next) => {
+  try {
+    const db = await getDb();
+    const { status, date, orderNumber, name } = req.query;
+    let query = "SELECT o.* FROM Orders o WHERE 1=1";
+    const request = db.request();
+
+    if (status) {
+      query += " AND o.OrderStatus = @status";
+      request.input("status", sql.NVarChar, status);
+    }
+    if (date) {
+      query += " AND o.RentalDate = @rentalDateFilter";
+      request.input("rentalDateFilter", sql.Date, date);
+    }
+    const orderNoTrim = orderNumber != null ? String(orderNumber).trim() : "";
+    if (orderNoTrim) {
+      query += " AND o.OrderNumber LIKE @orderNumberLike";
+      request.input("orderNumberLike", sql.NVarChar, `%${orderNoTrim}%`);
+    }
+    const nameTrim = name != null ? String(name).trim() : "";
+    if (nameTrim) {
+      query += ` AND (
+        o.ContactName LIKE @nameSearch OR o.ContactEmail LIKE @nameSearch OR o.ContactPhone LIKE @nameSearch
+        OR EXISTS (
+          SELECT 1 FROM Users u WHERE u.Id = o.UserId
+          AND (u.Name LIKE @nameSearch OR u.Email LIKE @nameSearch OR u.Phone LIKE @nameSearch)
+        )
+      )`;
+      request.input("nameSearch", sql.NVarChar, `%${nameTrim}%`);
+    }
+    query += " ORDER BY o.CreatedAt DESC";
+
+    const result = await request.query(query);
+    const orders = result.recordset;
+    if (orders.length === 0) {
+      return res.json([]);
+    }
+
+    const orderIds = orders.map((o) => o.Id);
+    const idList = orderIds.join(",");
+
+    const itemsResult = await db.request().query(`
+      SELECT oi.Id, oi.OrderId, oi.EquipmentId, oi.ItemName, oi.Quantity, oi.UnitPrice, oi.TotalPrice,
+        (SELECT TOP 1 ei.ImageUrl FROM EquipmentImages ei
+         WHERE ei.EquipmentId = oi.EquipmentId ORDER BY ei.SortOrder, ei.Id) AS PrimaryImageUrl
+      FROM OrderItems oi
+      WHERE oi.OrderId IN (${idList})
+      ORDER BY oi.OrderId, oi.Id
+    `);
+
+    const userIds = [...new Set(orders.map((o) => o.UserId).filter((id) => id != null))];
+    const usersById = {};
+    if (userIds.length > 0) {
+      const uList = userIds.join(",");
+      const usersResult = await db.request().query(`
+        SELECT Id, Name, Email, Phone, IsAdmin FROM Users WHERE Id IN (${uList})
+      `);
+      for (const u of usersResult.recordset) {
+        usersById[u.Id] = {
+          id: u.Id,
+          name: u.Name,
+          email: u.Email,
+          phone: u.Phone,
+          isAdmin: !!u.IsAdmin
+        };
+      }
+    }
+
+    const itemsByOrder = {};
+    for (const row of itemsResult.recordset) {
+      if (!itemsByOrder[row.OrderId]) itemsByOrder[row.OrderId] = [];
+      itemsByOrder[row.OrderId].push({
+        id: row.Id,
+        equipmentId: row.EquipmentId,
+        itemName: row.ItemName,
+        quantity: row.Quantity,
+        unitPrice: Number(row.UnitPrice),
+        totalPrice: Number(row.TotalPrice),
+        primaryImageUrl: row.PrimaryImageUrl || null
+      });
+    }
+
+    const enriched = orders.map((o) => ({
+      ...o,
+      items: itemsByOrder[o.Id] || [],
+      account: o.UserId ? usersById[o.UserId] ?? null : null
+    }));
+
+    res.json(enriched);
+  } catch (err) {
+    next(err);
+  }
 });
 
 router.patch("/orders/:id/status", async (req, res) => {
@@ -264,8 +431,18 @@ router.get("/settings", async (_req, res) => {
 
 router.put("/settings", async (req, res) => {
   const db = await getDb();
-  const { deliveryPricePerMile, maxDeliveryDistanceMiles, businessAddress, taxRate, companyName, supportEmail, supportPhone } = req.body;
+  const {
+    deliveryFixedFee,
+    deliveryPricePerMile,
+    maxDeliveryDistanceMiles,
+    businessAddress,
+    taxRate,
+    companyName,
+    supportEmail,
+    supportPhone
+  } = req.body;
   await db.request()
+    .input("deliveryFixedFee", sql.Decimal(10, 2), deliveryFixedFee == null ? 0 : deliveryFixedFee)
     .input("deliveryPricePerMile", sql.Decimal(10, 2), deliveryPricePerMile)
     .input("maxDeliveryDistanceMiles", sql.Decimal(10, 2), maxDeliveryDistanceMiles)
     .input("businessAddress", sql.NVarChar, businessAddress)
@@ -275,7 +452,7 @@ router.put("/settings", async (req, res) => {
     .input("supportPhone", sql.NVarChar, supportPhone || null)
     .query(`
       UPDATE Settings
-      SET DeliveryPricePerMile = @deliveryPricePerMile, MaxDeliveryDistanceMiles = @maxDeliveryDistanceMiles,
+      SET DeliveryFixedFee = @deliveryFixedFee, DeliveryPricePerMile = @deliveryPricePerMile, MaxDeliveryDistanceMiles = @maxDeliveryDistanceMiles,
           BusinessAddress = @businessAddress, TaxRate = @taxRate, CompanyName = @companyName,
           SupportEmail = @supportEmail, SupportPhone = @supportPhone, UpdatedAt = SYSUTCDATETIME()
       WHERE Id = 1
@@ -295,6 +472,24 @@ router.get("/customers", async (req, res) => {
       ORDER BY CreatedAt DESC
     `);
   res.json(result.recordset);
+});
+
+router.patch("/customers/:id", async (req, res, next) => {
+  try {
+    const db = await getDb();
+    const id = Number(req.params.id);
+    const { isAdmin } = req.body;
+    if (typeof isAdmin !== "boolean") {
+      return res.status(400).json({ message: "isAdmin (boolean) is required" });
+    }
+    await db.request()
+      .input("id", sql.Int, id)
+      .input("isAdmin", sql.Bit, isAdmin)
+      .query("UPDATE Users SET IsAdmin = @isAdmin, UpdatedAt = SYSUTCDATETIME() WHERE Id = @id");
+    res.json({ success: true });
+  } catch (err) {
+    next(err);
+  }
 });
 
 router.get("/customers/:id", async (req, res) => {

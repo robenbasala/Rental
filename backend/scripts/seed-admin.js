@@ -1,5 +1,5 @@
 /**
- * Upserts demo admin (fixes "Invalid credentials" when DB row/hash is wrong).
+ * Upserts demo admin in Users (IsAdmin = 1). Run after DB migration.
  * Usage: npm run seed:admin
  */
 import dotenv from "dotenv";
@@ -28,17 +28,28 @@ const hash = bcrypt.hashSync(password, 10);
 
 const pool = await sql.connect(config);
 
+const colCheck = await pool.request().query(`SELECT COL_LENGTH('dbo.Users', 'IsAdmin') AS L`);
+if (colCheck.recordset[0]?.L == null) {
+  console.error("Column Users.IsAdmin is missing. Run: npm run migrate:users-is-admin");
+  await pool.close();
+  process.exit(1);
+}
+
 const existing = await pool
   .request()
   .input("email", sql.NVarChar, email)
-  .query("SELECT Id FROM AdminUsers WHERE Email = @email");
+  .query("SELECT Id FROM Users WHERE Email = @email");
 
 if (existing.recordset.length) {
   await pool
     .request()
     .input("email", sql.NVarChar, email)
     .input("hash", sql.NVarChar, hash)
-    .query("UPDATE AdminUsers SET PasswordHash = @hash, IsActive = 1, UpdatedAt = SYSUTCDATETIME() WHERE Email = @email");
+    .query(`
+      UPDATE Users
+      SET PasswordHash = @hash, IsAdmin = 1, IsActive = 1, UpdatedAt = SYSUTCDATETIME()
+      WHERE Email = @email
+    `);
   console.log(`Updated admin password for ${email} (password: ${password})`);
 } else {
   await pool
@@ -47,10 +58,10 @@ if (existing.recordset.length) {
     .input("email", sql.NVarChar, email)
     .input("hash", sql.NVarChar, hash)
     .query(`
-      INSERT INTO AdminUsers (Name, Email, PasswordHash, IsActive)
-      VALUES (@name, @email, @hash, 1)
+      INSERT INTO Users (Name, Email, Phone, PasswordHash, IsAdmin, IsActive)
+      VALUES (@name, @email, NULL, @hash, 1, 1)
     `);
-  console.log(`Created admin ${email} (password: ${password})`);
+  console.log(`Created admin user ${email} (password: ${password})`);
 }
 
 await pool.close();

@@ -1,4 +1,5 @@
 import axios from "axios";
+import { getTokenForAdminApi } from "./adminSession";
 
 export const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || "http://localhost:4000/api"
@@ -7,7 +8,7 @@ export const api = axios.create({
 api.interceptors.request.use((config) => {
   const path = config.url || "";
   if (path.startsWith("/admin") && path !== "/admin/login") {
-    const token = localStorage.getItem("adminToken");
+    const token = getTokenForAdminApi();
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }

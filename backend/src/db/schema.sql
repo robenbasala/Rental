@@ -5,16 +5,7 @@ CREATE TABLE Users (
   Phone NVARCHAR(30) NULL UNIQUE,
   PasswordHash NVARCHAR(255) NOT NULL,
   StripeCustomerId NVARCHAR(120) NULL,
-  IsActive BIT NOT NULL DEFAULT 1,
-  CreatedAt DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
-  UpdatedAt DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME()
-);
-
-CREATE TABLE AdminUsers (
-  Id INT IDENTITY(1,1) PRIMARY KEY,
-  Name NVARCHAR(120) NOT NULL,
-  Email NVARCHAR(255) NOT NULL UNIQUE,
-  PasswordHash NVARCHAR(255) NOT NULL,
+  IsAdmin BIT NOT NULL DEFAULT 0,
   IsActive BIT NOT NULL DEFAULT 1,
   CreatedAt DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
   UpdatedAt DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME()
@@ -111,6 +102,7 @@ CREATE TABLE Invoices (
 
 CREATE TABLE Settings (
   Id INT IDENTITY(1,1) PRIMARY KEY,
+  DeliveryFixedFee DECIMAL(10,2) NOT NULL DEFAULT 0,
   DeliveryPricePerMile DECIMAL(10,2) NOT NULL DEFAULT 0.75,
   MaxDeliveryDistanceMiles DECIMAL(10,2) NOT NULL DEFAULT 30,
   BusinessAddress NVARCHAR(400) NOT NULL,
@@ -118,6 +110,17 @@ CREATE TABLE Settings (
   CompanyName NVARCHAR(200) NOT NULL DEFAULT 'Kids Party Rentals',
   SupportEmail NVARCHAR(255) NULL,
   SupportPhone NVARCHAR(30) NULL,
+  CreatedAt DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
+  UpdatedAt DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME()
+);
+
+CREATE TABLE RentalPackages (
+  Id INT IDENTITY(1,1) PRIMARY KEY,
+  Name NVARCHAR(160) NOT NULL,
+  SummaryLine NVARCHAR(500) NULL,
+  Price DECIMAL(10,2) NOT NULL,
+  SortOrder INT NOT NULL DEFAULT 0,
+  IsActive BIT NOT NULL DEFAULT 1,
   CreatedAt DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
   UpdatedAt DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME()
 );
@@ -157,7 +160,7 @@ CREATE TABLE CustomerActivityLog (
 CREATE TABLE AdminNotes (
   Id INT IDENTITY(1,1) PRIMARY KEY,
   UserId INT NOT NULL FOREIGN KEY REFERENCES Users(Id),
-  AdminUserId INT NOT NULL FOREIGN KEY REFERENCES AdminUsers(Id),
+  AdminUserId INT NOT NULL FOREIGN KEY REFERENCES Users(Id),
   Note NVARCHAR(MAX) NOT NULL,
   CreatedAt DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME()
 );
@@ -174,3 +177,9 @@ CREATE TABLE OrderStatusHistory (
 );
 
 INSERT INTO Settings (BusinessAddress) VALUES ('25 Monroe Ave, Toms River, NJ 08755');
+
+INSERT INTO RentalPackages (Name, SummaryLine, Price, SortOrder, IsActive) VALUES
+  ('Package 1', 'Large bounce + concession', 360.00, 1, 1),
+  ('Package 2', 'Combo unit + concession', 435.00, 2, 1),
+  ('Package 3', '15ft water slide + concession', 460.00, 3, 1),
+  ('Package 4', '20ft water slide + concession', 600.00, 4, 1);

@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { notifyCustomerSessionChanged } from "../adminSession";
 import { api } from "../api";
 import { clearSignupPrefill, readSignupPrefill } from "../checkoutSignupPrefill";
 
@@ -65,6 +66,7 @@ export default function CreateAccountPage() {
         password
       });
       localStorage.setItem("customerToken", reg.data.token);
+      notifyCustomerSessionChanged();
       if (fromCheckout) {
         navigate(returnTo);
       } else {
@@ -79,6 +81,7 @@ export default function CreateAccountPage() {
           const login = em ? em : ph;
           const log = await api.post("/auth/login", { login, password });
           localStorage.setItem("customerToken", log.data.token);
+          notifyCustomerSessionChanged();
           if (fromCheckout) {
             navigate(returnTo);
           } else {

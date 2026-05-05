@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { getTokenForAdminApi } from "../../adminSession";
 import { api, setAuthToken } from "../../api";
 import AdminNav from "../../components/AdminNav";
 
 const emptyForm = {
   businessAddress: "",
+  deliveryFixedFee: "",
   deliveryPricePerMile: "",
   maxDeliveryDistanceMiles: "",
   taxPercent: "",
@@ -19,7 +21,7 @@ export default function AdminSettingsPage() {
   const [banner, setBanner] = useState({ type: "", text: "" });
 
   useEffect(() => {
-    setAuthToken(localStorage.getItem("adminToken"));
+    setAuthToken(getTokenForAdminApi());
   }, []);
 
   const { data, isLoading } = useQuery({
@@ -32,6 +34,7 @@ export default function AdminSettingsPage() {
     const tax = Number(data.TaxRate ?? 0);
     setForm({
       businessAddress: data.BusinessAddress ?? "",
+      deliveryFixedFee: String(data.DeliveryFixedFee ?? ""),
       deliveryPricePerMile: String(data.DeliveryPricePerMile ?? ""),
       maxDeliveryDistanceMiles: String(data.MaxDeliveryDistanceMiles ?? ""),
       taxPercent: (Number.isFinite(tax) ? tax * 100 : 0).toFixed(2),
@@ -59,11 +62,16 @@ export default function AdminSettingsPage() {
     e.preventDefault();
     setBanner({ type: "", text: "" });
 
+    const deliveryFixedFee = Number(form.deliveryFixedFee);
     const deliveryPricePerMile = Number(form.deliveryPricePerMile);
     const maxDeliveryDistanceMiles = Number(form.maxDeliveryDistanceMiles);
     const taxPercent = Number(form.taxPercent);
     if (!String(form.businessAddress).trim()) {
       setBanner({ type: "err", text: "Business address is required." });
+      return;
+    }
+    if (!Number.isFinite(deliveryFixedFee) || deliveryFixedFee < 0) {
+      setBanner({ type: "err", text: "Dropoff base fee must be zero or a positive number." });
       return;
     }
     if (!Number.isFinite(deliveryPricePerMile) || deliveryPricePerMile < 0) {
@@ -83,6 +91,7 @@ export default function AdminSettingsPage() {
 
     saveMutation.mutate({
       businessAddress: String(form.businessAddress).trim(),
+      deliveryFixedFee,
       deliveryPricePerMile,
       maxDeliveryDistanceMiles,
       taxRate,
@@ -131,9 +140,21 @@ export default function AdminSettingsPage() {
               />
             </div>
 
-            <div className="grid sm:grid-cols-2 gap-4">
+            <div className="grid sm:grid-cols-3 gap-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700">Delivery price ($ / mile)</label>
+                <label className="block text-sm font-medium text-slate-700">Dropoff base fee ($)</label>
+                <input
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  className="mt-1 border rounded-xl px-3 py-2 w-full"
+                  value={form.deliveryFixedFee}
+                  onChange={(e) => setForm((f) => ({ ...f, deliveryFixedFee: e.target.value }))}
+                />
+                <p className="text-xs text-slate-500 mt-1">Added once per dropoff, before per-mile charges.</p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700">Price per mile ($)</label>
                 <input
                   type="number"
                   min={0}

@@ -6,9 +6,14 @@ export default function ProductsPage({ cart, setCart, booking, setBooking }) {
 
   return (
     <div>
-      <section className="brand-panel mb-4 !p-6">
-        <h1 className="text-3xl font-bold tracking-tight">Our Rentals</h1>
-        <p className="mt-2 text-indigo-100">Pick equipment, choose date/time, and checkout in under 2 minutes.</p>
+      <section className="brand-panel mb-6 !z-30 !overflow-visible !p-6">
+        <h1 className="text-3xl font-bold tracking-tight">Your Simcha Time</h1>
+        <p className="mt-2 text-indigo-100">Pick your date and time, then browse rentals in under 2 minutes.</p>
+        <BookingBar
+          booking={booking}
+          setBooking={setBooking}
+          className="booking-shell mt-5 p-3"
+        />
         <div className="mt-4 flex flex-wrap gap-2">
           {tags.map((tag) => (
             <span key={tag} className="rounded-full bg-white/15 px-3 py-1 text-sm font-medium text-white ring-1 ring-white/25">
@@ -17,7 +22,6 @@ export default function ProductsPage({ cart, setCart, booking, setBooking }) {
           ))}
         </div>
       </section>
-      <BookingBar booking={booking} setBooking={setBooking} />
       <EquipmentGrid />
     </div>
   );
