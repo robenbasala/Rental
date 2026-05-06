@@ -22,6 +22,7 @@ export const env = {
   stripeWebhookSecret: process.env.STRIPE_WEBHOOK_SECRET || "",
   stripeCurrency: process.env.STRIPE_CURRENCY || "usd",
   frontendUrl: process.env.FRONTEND_URL || "http://localhost:5173",
+  googleClientId: process.env.GOOGLE_CLIENT_ID || "",
   googleMapsApiKey: process.env.GOOGLE_MAPS_API_KEY || "",
   businessAddress: process.env.BUSINESS_ADDRESS || "25 Monroe Ave, Toms River, NJ 08755",
   emailProvider: process.env.EMAIL_PROVIDER || "sendgrid",

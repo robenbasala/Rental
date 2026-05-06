@@ -512,6 +512,29 @@
   .checkout-summary-total {
     @apply mt-1 border-t border-white/25 pt-2 text-base font-semibold text-white;
   }
+
+  .google-auth-shell {
+    @apply mx-auto w-full max-w-[340px] rounded-2xl border border-white/30 px-3 py-3 text-center backdrop-blur-xl;
+    background-color: rgb(255 255 255 / 0.12);
+    box-shadow:
+      0 1px 0 rgb(255 255 255 / 0.18) inset,
+      0 14px 28px -22px rgb(20 14 60 / 0.9);
+  }
+
+  .google-auth-label {
+    @apply mb-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-indigo-100/85;
+  }
+
+  .google-auth-target {
+    @apply flex justify-center;
+  }
+
+  .google-auth-target iframe {
+    border-radius: 9999px;
+    box-shadow:
+      0 0 0 1px rgb(255 255 255 / 0.35),
+      0 10px 30px -20px rgb(11 8 34 / 0.9);
+  }
 }
 
 /*

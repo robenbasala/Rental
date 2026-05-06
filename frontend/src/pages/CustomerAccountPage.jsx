@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api";
 import { notifyAdminSessionChanged, notifyCustomerSessionChanged } from "../adminSession";
+import GoogleSignInButton from "../components/GoogleSignInButton";
 
 const FALLBACK_IMG =
   "https://images.unsplash.com/photo-1527529482837-4698179dc6ce?auto=format&fit=crop&w=400&q=70";
@@ -109,6 +110,19 @@ export default function CustomerAccountPage() {
     }
   };
 
+  const handleGoogleSignIn = async (credential) => {
+    setLoginError("");
+    try {
+      const res = await api.post("/auth/google", { idToken: credential });
+      localStorage.setItem("customerToken", res.data.token);
+      notifyCustomerSessionChanged();
+      setSession(res.data.token);
+      queryClient.invalidateQueries({ queryKey: ["profile"] });
+    } catch (err) {
+      setLoginError(err.response?.data?.message || "Google sign in failed.");
+    }
+  };
+
   if (!session) {
     return (
       <div className="mx-auto max-w-md">
@@ -142,6 +156,12 @@ export default function CustomerAccountPage() {
                 </Link>
               </div>
             </form>
+            <div className="mt-4">
+              <GoogleSignInButton
+                onCredential={handleGoogleSignIn}
+                onError={(msg) => setLoginError(msg || "Google sign in failed.")}
+              />
+            </div>
             <p className="mt-4 text-center text-xs text-indigo-100">
               New here?{" "}
               <Link to="/create-account" className="link-on-brand text-xs">

@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { notifyCustomerSessionChanged } from "../adminSession";
 import { api } from "../api";
+import GoogleSignInButton from "../components/GoogleSignInButton";
 import { clearSignupPrefill, readSignupPrefill } from "../checkoutSignupPrefill";
 
 function validEmail(s) {
@@ -99,6 +100,26 @@ export default function CreateAccountPage() {
     }
   };
 
+  const handleGoogleSignIn = async (credential) => {
+    setErr("");
+    setLoading(true);
+    try {
+      const res = await api.post("/auth/google", { idToken: credential });
+      localStorage.setItem("customerToken", res.data.token);
+      notifyCustomerSessionChanged();
+      if (fromCheckout) {
+        navigate(returnTo);
+      } else {
+        clearSignupPrefill();
+        navigate("/account");
+      }
+    } catch (e2) {
+      setErr(e2.response?.data?.message || "Google sign in failed.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   if (fromCheckout && !stored) {
     return (
       <div className="mx-auto max-w-md">
@@ -177,6 +198,14 @@ export default function CreateAccountPage() {
               {loading ? "Please wait…" : locked ? "Create account & continue" : "Create account"}
             </button>
           </form>
+          {!locked && (
+            <div className="mt-4">
+              <GoogleSignInButton
+                onCredential={handleGoogleSignIn}
+                onError={(msg) => setErr(msg || "Google sign in failed.")}
+              />
+            </div>
+          )}
 
           <p className="mt-6 text-center text-sm text-indigo-100">
             Already have an account?{" "}
