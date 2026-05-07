@@ -8,14 +8,47 @@ import { getDb, sql } from "../config/db.js";
 import { env } from "../config/env.js";
 import { sendPasswordResetEmail } from "../services/emailService.js";
 import { autocompleteUsAddresses, calculateDistanceMiles } from "../services/mapsService.js";
-import { calculateTotals, computeDropoffDeliveryFee, round2 } from "../utils/pricing.js";
-import { normalizeSqlDate, normalizeSqlTime } from "../utils/sqlDateTime.js";
+import { computeDropoffDeliveryFee } from "../utils/pricing.js";
 import { createCheckoutSession, stripe } from "../services/stripeService.js";
 import { requireUser, requireCustomer } from "../middleware/auth.js";
 import { ordersTableHasPayLater } from "../utils/ordersSchema.js";
+import { buildQuote } from "../services/quoteService.js";
+import { validateOrderRequest } from "../services/orderValidation.js";
+import { insertOrderWithItems } from "../services/orderInsert.js";
+import { ensureCheckoutDraftsTable } from "../db/ensureCheckoutDrafts.js";
+import { handleCheckoutSessionCompleted } from "../services/stripeCheckoutComplete.js";
 
 const router = Router();
 const googleAuthClient = new OAuth2Client();
+
+async function getOrderReceiptPayload(db, orderId) {
+  const id = Number(orderId);
+  if (!Number.isFinite(id) || id < 1) return null;
+
+  const orderResult = await db.request().input("id", sql.Int, id).query("SELECT * FROM Orders WHERE Id = @id");
+  const order = orderResult.recordset[0];
+  if (!order) return null;
+
+  const invResult = await db.request().input("orderId", sql.Int, id).query(`
+    SELECT TOP 1 InvoiceNumber FROM Invoices WHERE OrderId = @orderId ORDER BY Id DESC
+  `);
+  const invoiceNumber = invResult.recordset[0]?.InvoiceNumber || null;
+
+  const itemsResult = await db.request().input("orderId", sql.Int, id).query(`
+    SELECT oi.Id, oi.EquipmentId, oi.PackageId, oi.ItemName, oi.Quantity, oi.UnitPrice, oi.TotalPrice,
+      (SELECT TOP 1 ei.ImageUrl FROM EquipmentImages ei
+       WHERE ei.EquipmentId = oi.EquipmentId ORDER BY ei.SortOrder, ei.Id) AS ImageUrl
+    FROM OrderItems oi
+    WHERE oi.OrderId = @orderId
+    ORDER BY oi.Id
+  `);
+
+  return {
+    ...order,
+    InvoiceNumber: invoiceNumber,
+    items: itemsResult.recordset
+  };
+}
 
 function badRequestIfInvalid(req, res) {
   const errors = validationResult(req);
@@ -26,42 +59,65 @@ function badRequestIfInvalid(req, res) {
   return false;
 }
 
-async function buildQuote(db, { items, deliveryMethod, deliveryAddress }) {
-  const settingsResult = await db.request().query("SELECT TOP 1 * FROM Settings");
-  const settings = settingsResult.recordset[0];
-  let deliveryFee = 0;
-  let distanceMiles = 0;
-
-  if (deliveryMethod === "Dropoff" && deliveryAddress) {
-    distanceMiles = await calculateDistanceMiles(deliveryAddress);
-    deliveryFee = computeDropoffDeliveryFee(distanceMiles, settings);
+/**
+ * Fetches a remote image server-side so the receipt PDF (html2canvas) can paint it without browser CORS tainting.
+ * SSRF: only http(s), blocks obvious internal hosts.
+ */
+router.get("/media/image", async (req, res) => {
+  const raw = String(req.query.url || "").trim();
+  if (raw.length > 2048 || (!raw.startsWith("http://") && !raw.startsWith("https://"))) {
+    return res.status(400).send("Bad url");
+  }
+  let parsed;
+  try {
+    parsed = new URL(raw);
+  } catch {
+    return res.status(400).send("Bad url");
+  }
+  if (!["http:", "https:"].includes(parsed.protocol)) {
+    return res.status(400).send("Bad url");
+  }
+  const host = parsed.hostname.toLowerCase();
+  const isPrivateLan =
+    /^10\./.test(host) ||
+    /^172\.(1[6-9]|2\d|3[01])\./.test(host) ||
+    /^192\.168\./.test(host) ||
+    /^169\.254\./.test(host);
+  if (isPrivateLan || host === "0.0.0.0") {
+    return res.status(403).send("Forbidden");
+  }
+  if (
+    env.nodeEnv === "production" &&
+    (host === "localhost" || host.endsWith(".localhost") || /^127\./.test(host))
+  ) {
+    return res.status(403).send("Forbidden");
   }
 
-  const normalizedItems = [];
-  for (const item of items || []) {
-    const eq = await db.request()
-      .input("id", sql.Int, Number(item.equipmentId))
-      .query("SELECT Id, Name, PricePerRental, TotalQuantity FROM Equipment WHERE Id = @id AND IsActive = 1");
-    const row = eq.recordset[0];
-    if (!row) throw new Error(`Equipment not found: ${item.equipmentId}`);
-
-    normalizedItems.push({
-      equipmentId: row.Id,
-      name: row.Name,
-      unitPrice: Number(row.PricePerRental),
-      quantity: Number(item.quantity),
-      totalQuantity: Number(row.TotalQuantity)
+  try {
+    const upstream = await fetch(raw, {
+      redirect: "follow",
+      headers: { Accept: "image/*,*/*" }
     });
+    if (!upstream.ok) {
+      return res.status(502).send("Bad upstream");
+    }
+    const ct = upstream.headers.get("content-type") || "";
+    if (!ct.toLowerCase().startsWith("image/")) {
+      return res.status(400).send("Not an image");
+    }
+    const buf = Buffer.from(await upstream.arrayBuffer());
+    if (buf.length > 8 * 1024 * 1024) {
+      return res.status(413).send("Too large");
+    }
+    res.setHeader("Content-Type", ct.split(";")[0].trim());
+    res.setHeader("Cache-Control", "public, max-age=3600");
+    res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+    res.send(buf);
+  } catch (err) {
+    console.error("media/image proxy", err);
+    res.status(502).send("Fetch failed");
   }
-
-  const totals = calculateTotals({
-    items: normalizedItems,
-    deliveryFee,
-    taxRate: Number(settings.TaxRate)
-  });
-
-  return { items: normalizedItems, distanceMiles, deliveryFee, ...totals, settings };
-}
+});
 
 router.get("/equipment", async (_req, res) => {
   const db = await getDb();
@@ -390,160 +446,191 @@ router.post("/orders", requireCustomer, async (req, res) => {
   try {
     const db = await getDb();
     const userId = req.user.userId;
-    const {
-      contactName,
-      contactEmail,
-      contactPhone,
-      rentalDate,
-      startTime,
-      endTime,
-      deliveryMethod,
-      deliveryAddress,
-      items,
-      checkoutMode
-    } = req.body;
+    const mode = String(req.body.checkoutMode || "").toLowerCase().replace(/-/g, "_");
+    if (mode === "stripe") {
+      return res.status(400).json({
+        message:
+          "Card payment only completes after checkout. Use Pay Now — your order is created when payment succeeds."
+      });
+    }
 
-    const payLater = String(checkoutMode || "").toLowerCase().replace(/-/g, "_") === "pay_later";
+    const payLater = mode === "pay_later";
     const hasPayLaterCol = await ordersTableHasPayLater(db);
 
-    const dateNorm = normalizeSqlDate(rentalDate);
-    const startNorm = normalizeSqlTime(startTime);
-    const endNorm = normalizeSqlTime(endTime);
-    if (!dateNorm || !startNorm || !endNorm) {
-      return res.status(400).json({ message: "Rental date, start time, and end time are required and must be valid." });
-    }
-
-    const quote = await buildQuote(db, { items, deliveryMethod, deliveryAddress });
-
-    if (quote.distanceMiles > Number(quote.settings.MaxDeliveryDistanceMiles || 30)) {
-      return res.status(400).json({ message: "Delivery address is outside service range" });
-    }
-
-    for (const item of quote.items) {
-      const reserved = await db.request()
-        .input("equipmentId", sql.Int, item.equipmentId)
-        .input("rentalDate", sql.Date, dateNorm)
-        .query(`
-        SELECT ISNULL(SUM(oi.Quantity), 0) AS ReservedQty
-        FROM OrderItems oi
-        JOIN Orders o ON oi.OrderId = o.Id
-        WHERE oi.EquipmentId = @equipmentId
-          AND o.RentalDate = @rentalDate
-          AND o.OrderStatus IN ('Pending', 'Paid', 'Confirmed', 'OutForDelivery', 'Completed')
-      `);
-
-      const reservedQty = Number(reserved.recordset[0]?.ReservedQty || 0);
-      if (reservedQty + item.quantity > item.totalQuantity) {
-        return res.status(409).json({
-          message: `${item.name} has only ${Math.max(item.totalQuantity - reservedQty, 0)} left for selected date`
-        });
-      }
-    }
-    const orderNumber = `ORD-${Date.now()}`;
-
-    const baseReq = db.request()
-      .input("userId", sql.Int, userId)
-      .input("orderNumber", sql.NVarChar, orderNumber)
-      .input("rentalDate", sql.Date, dateNorm)
-      .input("startTime", sql.NVarChar(16), startNorm)
-      .input("endTime", sql.NVarChar(16), endNorm)
-      .input("contactName", sql.NVarChar, contactName)
-      .input("contactEmail", sql.NVarChar, contactEmail || null)
-      .input("contactPhone", sql.NVarChar, contactPhone || null)
-      .input("deliveryMethod", sql.NVarChar, deliveryMethod)
-      .input("deliveryAddress", sql.NVarChar, deliveryAddress || null)
-      .input("distance", sql.Decimal(10, 2), quote.distanceMiles || 0)
-      .input("deliveryFee", sql.Decimal(10, 2), quote.deliveryFee || 0)
-      .input("subtotal", sql.Decimal(10, 2), quote.subtotal)
-      .input("tax", sql.Decimal(10, 2), quote.tax)
-      .input("total", sql.Decimal(10, 2), quote.total);
-
-    let insertedOrder;
-    if (hasPayLaterCol) {
-      insertedOrder = await baseReq.input("payLater", sql.Bit, payLater).query(`
-      INSERT INTO Orders
-      (UserId, OrderNumber, RentalDate, StartTime, EndTime, ContactName, ContactEmail, ContactPhone, DeliveryMethod, DeliveryAddress, DeliveryDistanceMiles, DeliveryFee, Subtotal, Tax, Total, PayLater)
-      OUTPUT INSERTED.*
-      VALUES
-      (@userId, @orderNumber, @rentalDate, CAST(@startTime AS TIME), CAST(@endTime AS TIME), @contactName, @contactEmail, @contactPhone, @deliveryMethod, @deliveryAddress, @distance, @deliveryFee, @subtotal, @tax, @total, @payLater)
-    `);
-    } else {
-      insertedOrder = await baseReq.query(`
-      INSERT INTO Orders
-      (UserId, OrderNumber, RentalDate, StartTime, EndTime, ContactName, ContactEmail, ContactPhone, DeliveryMethod, DeliveryAddress, DeliveryDistanceMiles, DeliveryFee, Subtotal, Tax, Total)
-      OUTPUT INSERTED.*
-      VALUES
-      (@userId, @orderNumber, @rentalDate, CAST(@startTime AS TIME), CAST(@endTime AS TIME), @contactName, @contactEmail, @contactPhone, @deliveryMethod, @deliveryAddress, @distance, @deliveryFee, @subtotal, @tax, @total)
-    `);
-    }
-
-    const order = insertedOrder.recordset[0];
-    for (const item of quote.items) {
-      await db.request()
-        .input("orderId", sql.Int, order.Id)
-        .input("equipmentId", sql.Int, item.equipmentId)
-        .input("itemName", sql.NVarChar, item.name)
-        .input("qty", sql.Int, item.quantity)
-        .input("unitPrice", sql.Decimal(10, 2), item.unitPrice)
-        .input("totalPrice", sql.Decimal(10, 2), round2(item.quantity * item.unitPrice))
-        .query(`
-        INSERT INTO OrderItems (OrderId, EquipmentId, ItemName, Quantity, UnitPrice, TotalPrice)
-        VALUES (@orderId, @equipmentId, @itemName, @qty, @unitPrice, @totalPrice)
-      `);
-    }
+    const validated = await validateOrderRequest(db, req.body);
+    const order = await insertOrderWithItems(db, userId, validated, {
+      payLater,
+      stripeCheckoutSessionId: null
+    });
 
     res.status(201).json({
       orderId: order.Id,
       orderNumber: order.OrderNumber,
-      totals: quote,
+      totals: validated.quote,
       checkoutMode: payLater ? "pay_later" : "stripe",
       payLater: hasPayLaterCol ? payLater : false
     });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ message: err.message || "Could not create order" });
+    const msg = err.message || "Could not create order";
+    let status = 500;
+    if (msg.includes("left for selected")) status = 409;
+    else if (
+      msg.includes("required") ||
+      msg.includes("valid") ||
+      msg.includes("outside") ||
+      msg.includes("email") ||
+      msg.includes("phone") ||
+      msg.includes("PackageId") ||
+      msg.includes("quantity") ||
+      msg.includes("Enter an email")
+    ) {
+      status = 400;
+    }
+    res.status(status).json({ message: msg });
   }
 });
 
-router.post("/payments/create-session", requireCustomer, async (req, res) => {
-  const db = await getDb();
-  const { orderId } = req.body;
-  const orderResult = await db.request()
-    .input("orderId", sql.Int, Number(orderId))
-    .query("SELECT * FROM Orders WHERE Id = @orderId");
-  const order = orderResult.recordset[0];
-  if (!order) return res.status(404).json({ message: "Order not found" });
-  if (order.UserId != null && Number(order.UserId) !== Number(req.user.userId)) {
-    return res.status(403).json({ message: "This order does not belong to your account." });
+router.post("/payments/prepare-checkout", requireCustomer, async (req, res) => {
+  try {
+    const db = await getDb();
+    await ensureCheckoutDraftsTable(db);
+    const userId = req.user.userId;
+
+    const validated = await validateOrderRequest(db, req.body);
+    const draftId = randomUUID();
+
+    await db.request()
+      .input("id", sql.UniqueIdentifier, draftId)
+      .input("userId", sql.Int, userId)
+      .input("payload", sql.NVarChar(sql.MAX), JSON.stringify(req.body))
+      .input("expiresAt", sql.DateTime2, new Date(Date.now() + 60 * 60 * 1000))
+      .query(`
+        INSERT INTO CheckoutDrafts (Id, UserId, Payload, ExpiresAt)
+        VALUES (@id, @userId, @payload, @expiresAt)
+      `);
+
+    const session = await createCheckoutSession({
+      draftId,
+      userId,
+      amount: Number(validated.quote.total),
+      customerEmail: validated.contactEmail || undefined
+    });
+
+    res.json({ url: session.url, draftId });
+  } catch (err) {
+    console.error(err);
+    const msg = err.message || "Could not start checkout";
+    let status = 500;
+    if (msg.includes("left for selected")) status = 409;
+    else if (
+      msg.includes("required") ||
+      msg.includes("valid") ||
+      msg.includes("outside") ||
+      msg.includes("email") ||
+      msg.includes("phone") ||
+      msg.includes("PackageId") ||
+      msg.includes("quantity") ||
+      msg.includes("Enter an email")
+    ) {
+      status = 400;
+    }
+    res.status(status).json({ message: msg });
   }
+});
 
-  const session = await createCheckoutSession({
-    orderId: order.Id,
-    amount: Number(order.Total),
-    customerEmail: order.ContactEmail
-  });
+router.delete("/payments/checkout-draft/:id", requireCustomer, async (req, res) => {
+  try {
+    const db = await getDb();
+    await ensureCheckoutDraftsTable(db);
+    const id = String(req.params.id || "").trim();
+    if (!id) return res.status(400).json({ message: "draft id required" });
+    await db.request()
+      .input("id", sql.UniqueIdentifier, id)
+      .input("userId", sql.Int, req.user.userId)
+      .query(`
+        DELETE FROM CheckoutDrafts
+        WHERE Id = @id AND UserId = @userId AND ConsumedAt IS NULL
+      `);
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(400).json({ message: err.message || "Could not remove checkout draft" });
+  }
+});
 
-  await db.request()
-    .input("orderId", sql.Int, order.Id)
-    .input("sessionId", sql.NVarChar, session.id)
-    .query("UPDATE Orders SET StripeCheckoutSessionId = @sessionId WHERE Id = @orderId");
+router.post("/payments/verify-session", async (req, res, next) => {
+  try {
+    const sessionId = String(req.body.sessionId || "").trim();
+    if (!sessionId) {
+      return res.status(400).json({ message: "sessionId is required" });
+    }
+    const session = await stripe.checkout.sessions.retrieve(sessionId);
+    if (session.payment_status !== "paid") {
+      return res.status(400).json({ message: "Payment not completed yet." });
+    }
 
-  res.json({ url: session.url });
+    const db = await getDb();
+    let orderRow = await db.request()
+      .input("sid", sql.NVarChar, session.id)
+      .query(`SELECT TOP 1 Id FROM Orders WHERE StripeCheckoutSessionId = @sid`);
+
+    if (!orderRow.recordset[0]) {
+      for (let i = 0; i < 40; i++) {
+        await new Promise((r) => setTimeout(r, 400));
+        orderRow = await db.request()
+          .input("sid", sql.NVarChar, session.id)
+          .query(`SELECT TOP 1 Id FROM Orders WHERE StripeCheckoutSessionId = @sid`);
+        if (orderRow.recordset[0]) break;
+      }
+    }
+
+    /** If webhook never reached this server (common in local dev), create the order now — idempotent with webhook. */
+    if (!orderRow.recordset[0]) {
+      try {
+        await handleCheckoutSessionCompleted(session);
+      } catch (syncErr) {
+        console.error("verify-session: handleCheckoutSessionCompleted fallback failed", syncErr);
+      }
+      orderRow = await db.request()
+        .input("sid", sql.NVarChar, session.id)
+        .query(`SELECT TOP 1 Id FROM Orders WHERE StripeCheckoutSessionId = @sid`);
+      if (!orderRow.recordset[0]) {
+        for (let i = 0; i < 15; i++) {
+          await new Promise((r) => setTimeout(r, 300));
+          orderRow = await db.request()
+            .input("sid", sql.NVarChar, session.id)
+            .query(`SELECT TOP 1 Id FROM Orders WHERE StripeCheckoutSessionId = @sid`);
+          if (orderRow.recordset[0]) break;
+        }
+      }
+    }
+
+    if (!orderRow.recordset[0]) {
+      return res.status(503).json({
+        message:
+          "Payment succeeded but the order is not in our system yet. Check that the Stripe webhook reaches this API (e.g. stripe listen for local dev), or wait a moment and refresh."
+      });
+    }
+
+    const payload = await getOrderReceiptPayload(db, orderRow.recordset[0].Id);
+    if (!payload) return res.status(404).json({ message: "Order not found" });
+    res.json(payload);
+  } catch (err) {
+    next(err);
+  }
 });
 
 router.get("/orders/:id", async (req, res) => {
-  const db = await getDb();
-  const orderResult = await db.request()
-    .input("id", sql.Int, Number(req.params.id))
-    .query("SELECT * FROM Orders WHERE Id = @id");
-  const order = orderResult.recordset[0];
-  if (!order) return res.status(404).json({ message: "Order not found" });
-
-  const items = await db.request()
-    .input("orderId", sql.Int, Number(req.params.id))
-    .query("SELECT * FROM OrderItems WHERE OrderId = @orderId");
-
-  res.json({ ...order, items: items.recordset });
+  try {
+    const db = await getDb();
+    const payload = await getOrderReceiptPayload(db, Number(req.params.id));
+    if (!payload) return res.status(404).json({ message: "Order not found" });
+    res.json(payload);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Could not load order" });
+  }
 });
 
 router.get("/me/profile", requireUser, async (req, res) => {

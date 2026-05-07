@@ -20,6 +20,8 @@ export const env = {
   },
   stripeSecretKey: process.env.STRIPE_SECRET_KEY || "",
   stripeWebhookSecret: process.env.STRIPE_WEBHOOK_SECRET || "",
+  /** Local only: if webhook signature fails, parse raw JSON (never enable in production). */
+  stripeWebhookBypassDev: process.env.STRIPE_WEBHOOK_BYPASS_DEV === "1",
   stripeCurrency: process.env.STRIPE_CURRENCY || "usd",
   frontendUrl: process.env.FRONTEND_URL || "http://localhost:5173",
   googleClientId: process.env.GOOGLE_CLIENT_ID || "",

@@ -1,16 +1,18 @@
-import { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useEffect, useLayoutEffect, useState } from "react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { notifyAdminSessionChanged, notifyCustomerSessionChanged } from "../adminSession";
 import { api } from "../api";
 import { clearSignupPrefill, readSignupPrefill, writeSignupPrefill } from "../checkoutSignupPrefill";
+import { peekStripeCheckoutResume, saveStripeCheckoutResume } from "../checkoutStripeResume";
 
 function validEmail(s) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(s || "").trim());
 }
 
-export default function CheckoutPage({ cart, setCart, booking }) {
+export default function CheckoutPage({ cart, setCart, booking, setBooking }) {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const queryClient = useQueryClient();
   const [form, setForm] = useState({
     contactName: "",
@@ -55,6 +57,30 @@ export default function CheckoutPage({ cart, setCart, booking }) {
       }));
     }
   }, [hasSession]);
+
+  /** Restore cart/booking from sessionStorage after Stripe redirect (full reload). Peek-only — never deletes keys here (Strict Mode / remount-safe). */
+  useLayoutEffect(() => {
+    const { cart: savedCart, booking: savedBooking } = peekStripeCheckoutResume();
+    if (!Array.isArray(savedCart) || savedCart.length === 0) return;
+
+    setCart((prev) => (prev.length > 0 ? prev : savedCart));
+    if (savedBooking && typeof savedBooking === "object") {
+      setBooking((prev) => ({ ...prev, ...savedBooking }));
+    }
+  }, [setCart, setBooking]);
+
+  useEffect(() => {
+    const cancelled = searchParams.get("cancelled");
+    const draftId = String(searchParams.get("draftId") || "").trim();
+    if (cancelled !== "1") return;
+
+    const clearQuery = () => setSearchParams({}, { replace: true });
+    if (draftId && localStorage.getItem("customerToken")) {
+      api.delete(`/payments/checkout-draft/${encodeURIComponent(draftId)}`).finally(clearQuery);
+    } else {
+      clearQuery();
+    }
+  }, [searchParams, setSearchParams]);
 
   useEffect(() => {
     const run = async () => {
@@ -193,8 +219,17 @@ export default function CheckoutPage({ cart, setCart, booking }) {
 
     setLoading(true);
     try {
-      const orderRes = await postOrder("stripe");
-      const paymentRes = await api.post("/payments/create-session", { orderId: orderRes.data.orderId });
+      const contact = orderContactPayload();
+      const paymentRes = await api.post("/payments/prepare-checkout", {
+        ...contact,
+        deliveryMethod: form.deliveryMethod,
+        deliveryAddress: form.deliveryAddress,
+        rentalDate: booking.rentalDate,
+        startTime: booking.startTime,
+        endTime: booking.endTime,
+        items: cart
+      });
+      saveStripeCheckoutResume(cart, booking);
       clearSignupPrefill();
       window.location.href = paymentRes.data.url;
     } catch (e) {

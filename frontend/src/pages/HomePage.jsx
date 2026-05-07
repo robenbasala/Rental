@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api";
 import BookingBar from "../components/BookingBar";
@@ -12,19 +13,12 @@ function formatPackagePrice(value) {
 }
 
 export default function HomePage({ cart, setCart, booking, setBooking }) {
+  const [packageError, setPackageError] = useState("");
+  const [packageNotice, setPackageNotice] = useState("");
   const { data: packages = [], isLoading: packagesLoading } = useQuery({
     queryKey: ["packages"],
     queryFn: async () => (await api.get("/packages")).data
   });
-
-  const categories = [
-    { title: "Bounce Houses", desc: "Castle, princess and sports themes for all ages." },
-    { title: "Combo Units", desc: "Jump + slide + climb combos for nonstop fun." },
-    { title: "Water Slides", desc: "Cool off with single and dual lane slides." },
-    { title: "Concessions", desc: "Popcorn, cotton candy and snow cone machines." },
-    { title: "Tables & Chairs", desc: "Simple seating packages for birthday parties." },
-    { title: "Party Add-ons", desc: "Extra fun upgrades for larger events." }
-  ];
 
   const faqs = [
     { q: "Is setup and takedown included?", a: "Yes. Our team handles setup and takedown for inflatable rentals." },
@@ -32,6 +26,28 @@ export default function HomePage({ cart, setCart, booking, setBooking }) {
     { q: "How do I confirm my booking?", a: "Select date/time, add items, checkout, then pay securely with Stripe." },
     { q: "What areas do you serve?", a: "Lakewood, Toms River, Jackson, and Howell." }
   ];
+
+  useEffect(() => {
+    if (!packageNotice) return undefined;
+    const timer = setTimeout(() => setPackageNotice(""), 2200);
+    return () => clearTimeout(timer);
+  }, [packageNotice]);
+
+  const addPackageToCart = (pkg) => {
+    if (!booking.rentalDate || !booking.startTime || !booking.endTime) {
+      setPackageError("Please choose rental date and times first.");
+      return;
+    }
+    const packageId = Number(pkg.Id);
+    const existing = cart.find((c) => Number(c.packageId) === packageId);
+    if (existing) {
+      setCart(cart.map((c) => (Number(c.packageId) === packageId ? { ...c, quantity: Number(c.quantity || 1) + 1 } : c)));
+    } else {
+      setCart([...cart, { packageId, name: pkg.Name, unitPrice: Number(pkg.Price), quantity: 1 }]);
+    }
+    setPackageError("");
+    setPackageNotice(`${pkg.Name} added to cart.`);
+  };
 
   return (
     <div>
@@ -45,9 +61,6 @@ export default function HomePage({ cart, setCart, booking, setBooking }) {
         <div className="mt-6 flex flex-wrap gap-3">
           <Link to="/products" className="btn-secondary-on-brand">
             Browse Rentals
-          </Link>
-          <Link to="/checkout" className="btn-primary-on-brand">
-            Start Booking
           </Link>
         </div>
         <BookingBar
@@ -71,18 +84,6 @@ export default function HomePage({ cart, setCart, booking, setBooking }) {
       </section>
 
       <section className="mb-8">
-        <h2 className="section-title mb-4">Rental Categories</h2>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {categories.map((c) => (
-            <article key={c.title} className="card p-5">
-              <h3 className="text-lg font-semibold">{c.title}</h3>
-              <p className="mt-2 text-sm text-slate-600">{c.desc}</p>
-            </article>
-          ))}
-        </div>
-      </section>
-
-      <section className="mb-8">
         <h2 className="section-title mb-4">Party Packages</h2>
         {packagesLoading && <p className="text-sm text-slate-500">Loading packages…</p>}
         {!packagesLoading && packages.length === 0 && (
@@ -97,31 +98,29 @@ export default function HomePage({ cart, setCart, booking, setBooking }) {
                 {pkg.SummaryLine ? (
                   <p className="mt-2 text-sm text-slate-600">{pkg.SummaryLine}</p>
                 ) : null}
-                <Link to="/checkout" className="btn-gradient mt-4 inline-block w-full text-center">
-                  Book Package
-                </Link>
+                <button
+                  type="button"
+                  onClick={() => addPackageToCart(pkg)}
+                  className="btn-gradient mt-4 inline-block w-full text-center"
+                >
+                  Add Package
+                </button>
               </article>
             ))}
           </div>
         )}
+        {packageError ? <p className="mt-3 text-sm text-red-600">{packageError}</p> : null}
+        {packageNotice ? (
+          <p className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700">
+            {packageNotice}
+          </p>
+        ) : null}
       </section>
 
-      <section className="mb-8 grid gap-4 lg:grid-cols-2">
-        <article className="card p-5">
-          <h2 className="text-2xl font-bold text-slate-900">Service Area</h2>
-          <p className="mt-2 text-slate-600">Main address: 25 Monroe Ave, Toms River, NJ 08755</p>
-          <ul className="mt-3 space-y-2 text-sm">
-            <li className="rounded-xl bg-indigo-50 px-3 py-2 text-slate-800">Lakewood, NJ</li>
-            <li className="rounded-xl bg-indigo-50 px-3 py-2 text-slate-800">Toms River, NJ</li>
-            <li className="rounded-xl bg-indigo-50 px-3 py-2 text-slate-800">Jackson, NJ</li>
-            <li className="rounded-xl bg-indigo-50 px-3 py-2 text-slate-800">Howell, NJ</li>
-          </ul>
-          <p className="mt-3 text-xs text-slate-500">Delivery fee is calculated automatically based on distance.</p>
-        </article>
-
-        <article className="card p-5">
+      <section className="mb-8">
+        <article className="card p-5 lg:p-6">
           <h2 className="text-2xl font-bold text-slate-900">Frequently Asked Questions</h2>
-          <div className="mt-3 space-y-3">
+          <div className="mt-4 grid gap-3 md:grid-cols-2">
             {faqs.map((f) => (
               <div key={f.q} className="rounded-xl border border-slate-200 bg-slate-50/80 p-3">
                 <p className="font-semibold text-slate-900">{f.q}</p>
@@ -132,13 +131,6 @@ export default function HomePage({ cart, setCart, booking, setBooking }) {
         </article>
       </section>
 
-      <section className="brand-panel mb-2 text-center">
-        <h2 className="text-3xl font-extrabold tracking-tight">Ready to book your party?</h2>
-        <p className="mt-2 text-indigo-100">Fast checkout. Easy scheduling. Happy kids.</p>
-        <Link to="/checkout" className="btn-primary-on-brand mt-5 inline-block">
-          Book Now
-        </Link>
-      </section>
     </div>
   );
 }

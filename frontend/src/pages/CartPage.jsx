@@ -56,11 +56,13 @@ export default function CartPage({ cart, setCart, booking }) {
     equipment.map((e) => [e.Id, e.PrimaryImageUrl || FALLBACK_IMG])
   );
 
-  const updateQty = (equipmentId, delta) => {
+  const itemKey = (item) => (item.equipmentId != null ? `eq-${item.equipmentId}` : `pkg-${item.packageId}`);
+
+  const updateQty = (key, delta) => {
     setCart(
       cart
         .map((c) => {
-          if (c.equipmentId !== equipmentId) return c;
+          if (itemKey(c) !== key) return c;
           const next = c.quantity + delta;
           if (next < 1) return null;
           return { ...c, quantity: next };
@@ -69,8 +71,8 @@ export default function CartPage({ cart, setCart, booking }) {
     );
   };
 
-  const removeLine = (equipmentId) => {
-    setCart(cart.filter((c) => c.equipmentId !== equipmentId));
+  const removeLine = (key) => {
+    setCart(cart.filter((c) => itemKey(c) !== key));
   };
 
   const subtotal = quote?.subtotal ?? subtotalLocal;
@@ -98,12 +100,12 @@ export default function CartPage({ cart, setCart, booking }) {
             <div className="space-y-4">
               {cart.map((item) => (
                 <div
-                  key={item.equipmentId}
+                  key={itemKey(item)}
                   className="card flex flex-col overflow-hidden transition hover:border-indigo-200/60 sm:flex-row sm:gap-0"
                 >
                   <div className="relative aspect-[4/5] w-full shrink-0 overflow-hidden bg-white sm:aspect-auto sm:h-44 sm:w-44 sm:rounded-l-3xl">
                     <img
-                      src={imageById[item.equipmentId] || FALLBACK_IMG}
+                      src={item.equipmentId != null ? (imageById[item.equipmentId] || FALLBACK_IMG) : FALLBACK_IMG}
                       alt=""
                       className="product-media-img"
                       loading="lazy"
@@ -120,7 +122,7 @@ export default function CartPage({ cart, setCart, booking }) {
                           type="button"
                           aria-label="Decrease quantity"
                           className="rounded-l-2xl px-3 py-2 text-slate-600 hover:bg-slate-100"
-                          onClick={() => updateQty(item.equipmentId, -1)}
+                          onClick={() => updateQty(itemKey(item), -1)}
                         >
                           −
                         </button>
@@ -129,14 +131,14 @@ export default function CartPage({ cart, setCart, booking }) {
                           type="button"
                           aria-label="Increase quantity"
                           className="rounded-r-2xl px-3 py-2 text-slate-600 hover:bg-slate-100"
-                          onClick={() => updateQty(item.equipmentId, 1)}
+                          onClick={() => updateQty(itemKey(item), 1)}
                         >
                           +
                         </button>
                       </div>
                       <button
                         type="button"
-                        onClick={() => removeLine(item.equipmentId)}
+                        onClick={() => removeLine(itemKey(item))}
                         className="text-sm font-medium text-red-600 hover:text-red-700"
                       >
                         Remove

@@ -37,8 +37,11 @@ export default function App() {
           <Route path="/products" element={<ProductsPage cart={cart} setCart={setCart} booking={booking} setBooking={setBooking} />} />
           <Route path="/products/:id" element={<ProductDetailsPage cart={cart} setCart={setCart} booking={booking} setBooking={setBooking} />} />
           <Route path="/cart" element={<CartPage cart={cart} setCart={setCart} booking={booking} />} />
-          <Route path="/checkout" element={<CheckoutPage cart={cart} setCart={setCart} booking={booking} />} />
-          <Route path="/payment-success" element={<PaymentSuccessPage />} />
+          <Route
+            path="/checkout"
+            element={<CheckoutPage cart={cart} setCart={setCart} booking={booking} setBooking={setBooking} />}
+          />
+          <Route path="/payment-success" element={<PaymentSuccessPage setCart={setCart} />} />
           <Route path="/invoices/:id" element={<InvoicePage />} />
           <Route path="/create-account" element={<CreateAccountPage />} />
           <Route path="/account" element={<CustomerAccountPage />} />
@@ -62,12 +65,27 @@ export default function App() {
             <p className="footer-heading">Kids Party Rentals</p>
             <p className="footer-copy mt-2">Bounce houses, slides, concessions, and party essentials.</p>
           </div>
-          <div>
-            <p className="footer-heading">Service Areas</p>
-            <p className="footer-copy mt-2">Lakewood</p>
-            <p className="footer-copy">Toms River</p>
-            <p className="footer-copy">Jackson</p>
-            <p className="footer-copy">Howell</p>
+          <div className="md:col-span-2 lg:col-span-2">
+            <div className="rounded-3xl border border-white/20 bg-gradient-to-br from-white/15 via-white/10 to-transparent p-5 shadow-[0_10px_40px_rgba(79,70,229,0.22)] backdrop-blur-md">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <p className="footer-heading">Service Area</p>
+                <span className="rounded-full border border-indigo-200/30 bg-indigo-300/15 px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-indigo-100">
+                  NJ Coverage
+                </span>
+              </div>
+              <p className="footer-copy mt-2">Main address: 25 Monroe Ave, Toms River, NJ 08755</p>
+              <div className="mt-4 flex flex-wrap gap-2.5">
+                {["Lakewood, NJ", "Toms River, NJ", "Jackson, NJ", "Howell, NJ"].map((city) => (
+                  <span
+                    key={city}
+                    className="rounded-full border border-white/25 bg-white/15 px-3 py-1.5 text-xs font-semibold text-indigo-50 shadow-sm"
+                  >
+                    {city}
+                  </span>
+                ))}
+              </div>
+              <p className="footer-copy mt-4 text-xs">Delivery fee is calculated automatically based on distance.</p>
+            </div>
           </div>
           <div>
             <p className="footer-heading">Quick Links</p>
@@ -75,7 +93,7 @@ export default function App() {
               <Link to="/products" className="footer-link">
                 Rentals
               </Link>
-              <Link to="/checkout" className="footer-link">
+              <Link to="/products" className="footer-link">
                 Book Now
               </Link>
               <Link to="/account" className="footer-link">

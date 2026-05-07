@@ -115,10 +115,11 @@ function TimeWheel({ items, selectedIndex, onSelect, label }) {
   );
 }
 
-export default function BookingBar({ booking, setBooking, className = "" }) {
+export default function BookingBar({ booking, setBooking, className = "", variant = "popover" }) {
+  const isInline = variant === "inline";
   const initial = useMemo(() => fromBooking(booking), [booking.rentalDate, booking.startTime]);
   const [durationHours, setDurationHours] = useState(() => normalizeDurationHours(booking.durationHours));
-  const [isOpen, setIsOpen] = useState(false);
+  const [isOpen, setIsOpen] = useState(() => isInline);
   const [selectedDate, setSelectedDate] = useState(initial);
   const [tempDate, setTempDate] = useState(initial);
   const [currentMonth, setCurrentMonth] = useState((initial || new Date()).getMonth());
@@ -149,6 +150,7 @@ export default function BookingBar({ booking, setBooking, className = "" }) {
   }, [booking.durationHours]);
 
   useEffect(() => {
+    if (isInline || !isOpen) return undefined;
     const onDocClick = (event) => {
       if (
         popoverRef.current &&
@@ -161,7 +163,7 @@ export default function BookingBar({ booking, setBooking, className = "" }) {
     };
     document.addEventListener("mousedown", onDocClick);
     return () => document.removeEventListener("mousedown", onDocClick);
-  }, []);
+  }, [isInline, isOpen]);
 
   const applyBooking = (dateValue, duration = durationHours) => {
     if (!dateValue) {
@@ -273,33 +275,42 @@ export default function BookingBar({ booking, setBooking, className = "" }) {
   const endLabel = booking.endTime || "--:--";
 
   return (
-    <div className={cn("relative", isOpen && "z-[260]", className)}>
-      <button
-        ref={inputRef}
-        type="button"
-        onClick={handleOpen}
-        className={cn(
-          "glass-card group flex w-full items-center gap-3 rounded-full px-5 py-4 transition-all duration-300 hover:border-indigo-400/40",
-          isOpen && "glow-effect border-indigo-400/50 ring-2 ring-indigo-500/50"
-        )}
-      >
-        <CalendarIcon className="h-5 w-5 text-indigo-300" />
-        <span className={cn("flex-1 text-left text-base", selectedDate ? "text-white" : "text-indigo-100/70")}>
-          {selectedDate ? formatDisplayDate(selectedDate) : "Select date & time"}
-        </span>
-        <Clock className="h-5 w-5 text-purple-300" />
-      </button>
+    <div className={cn("relative", !isInline && isOpen && "z-[260]", className)}>
+      {!isInline && (
+        <>
+          <button
+            ref={inputRef}
+            type="button"
+            onClick={handleOpen}
+            className={cn(
+              "glass-card group flex w-full items-center gap-3 rounded-full px-5 py-4 transition-all duration-300 hover:border-indigo-400/40",
+              isOpen && "glow-effect border-indigo-400/50 ring-2 ring-indigo-500/50"
+            )}
+          >
+            <CalendarIcon className="h-5 w-5 text-indigo-300" />
+            <span className={cn("flex-1 text-left text-base", selectedDate ? "text-white" : "text-indigo-100/70")}>
+              {selectedDate ? formatDisplayDate(selectedDate) : "Select date & time"}
+            </span>
+            <Clock className="h-5 w-5 text-purple-300" />
+          </button>
 
-      <div className="booking-summary mt-2">
-        <span><strong>Start:</strong> {startLabel}</span>
-        <span><strong>End:</strong> {endLabel}</span>
-        <span><strong>Duration:</strong> {durationHours}h</span>
-      </div>
+          <div className="booking-summary mt-2">
+            <span><strong>Start:</strong> {startLabel}</span>
+            <span><strong>End:</strong> {endLabel}</span>
+            <span><strong>Duration:</strong> {durationHours}h</span>
+          </div>
+        </>
+      )}
 
-      {isOpen && (
-        <div ref={popoverRef} className="scale-in absolute left-0 top-full z-[280] mt-3">
+      {(isInline || isOpen) && (
+        <div
+          ref={popoverRef}
+          className={cn(
+            isInline ? "relative left-auto top-auto z-auto mt-0 w-full" : "scale-in absolute left-0 top-full z-[280] mt-3"
+          )}
+        >
           <div className="aurora-border glow-effect rounded-3xl p-[2px]">
-            <div className="glass-card min-w-[340px] rounded-3xl p-5 sm:min-w-[640px]">
+            <div className={cn("glass-card rounded-3xl p-5", isInline ? "min-w-0 w-full sm:min-w-[560px]" : "min-w-[340px] sm:min-w-[640px]")}>
               <div className="grid gap-5 sm:grid-cols-[1.35fr_1fr]">
                 <div>
                   <div className="mb-4 flex items-center justify-between">

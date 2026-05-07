@@ -3,11 +3,7 @@ import { env } from "../config/env.js";
 
 export const stripe = new Stripe(env.stripeSecretKey);
 
-export async function createCheckoutSession({
-  orderId,
-  amount,
-  customerEmail
-}) {
+export async function createCheckoutSession({ draftId, userId, amount, customerEmail }) {
   return stripe.checkout.sessions.create({
     mode: "payment",
     customer_email: customerEmail || undefined,
@@ -16,13 +12,16 @@ export async function createCheckoutSession({
         quantity: 1,
         price_data: {
           currency: env.stripeCurrency,
-          product_data: { name: `Rental Order #${orderId}` },
-          unit_amount: Math.round(amount * 100)
+          product_data: { name: "Party rental checkout" },
+          unit_amount: Math.round(Number(amount) * 100)
         }
       }
     ],
-    metadata: { orderId: String(orderId) },
+    metadata: {
+      draftId: String(draftId),
+      userId: String(userId)
+    },
     success_url: `${env.frontendUrl}/payment-success?session_id={CHECKOUT_SESSION_ID}`,
-    cancel_url: `${env.frontendUrl}/checkout?cancelled=1`
+    cancel_url: `${env.frontendUrl}/checkout?cancelled=1&draftId=${encodeURIComponent(String(draftId))}`
   });
 }

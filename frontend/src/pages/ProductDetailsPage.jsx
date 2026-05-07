@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useParams } from "react-router-dom";
 import { api } from "../api";
+import BookingBar from "../components/BookingBar";
 
 export default function ProductDetailsPage({ cart, setCart, booking, setBooking }) {
   const { id } = useParams();
@@ -11,6 +12,8 @@ export default function ProductDetailsPage({ cart, setCart, booking, setBooking 
     quantity: 1
   });
   const [error, setError] = useState("");
+
+  const needsSchedule = !booking.rentalDate || !booking.startTime || !booking.endTime;
 
   const formatTime12 = (time) => {
     if (!time) return "Not selected";
@@ -29,7 +32,7 @@ export default function ProductDetailsPage({ cart, setCart, booking, setBooking 
   const addToCart = () => {
     if (!item) return;
     if (!booking.rentalDate || !booking.startTime || !booking.endTime) {
-      setError("Please choose date/time from the booking picker at the top first.");
+      setError("Please choose date and time in the picker above, then tap Confirm.");
       return;
     }
     if (Number(form.quantity) < 1) {
@@ -72,35 +75,51 @@ export default function ProductDetailsPage({ cart, setCart, booking, setBooking 
         </div>
       </article>
 
-      <article className="card p-5">
-        <h2 className="text-xl font-bold">Choose Date & Time</h2>
-        <p className="text-sm text-slate-500 mt-1">Schedule is set from the top booking picker. You can only choose quantity here.</p>
-        <div className="mt-4 space-y-3">
-          <div className="input-on-light bg-slate-50/90">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Date</p>
-            <p className="mt-1 font-medium text-slate-900">{booking.rentalDate || "Not selected"}</p>
+      <div className="flex min-w-0 flex-col gap-4">
+        {needsSchedule && (
+          <section className="min-w-0 overflow-x-auto rounded-2xl">
+            <p className="mb-2 text-sm font-semibold text-slate-800">Pick rental date &amp; time</p>
+            <p className="mb-3 text-xs text-slate-500">
+              Choose below, then <span className="font-medium text-slate-700">Confirm</span>. You can also use the booking bar at the top of the site.
+            </p>
+            <BookingBar variant="inline" booking={booking} setBooking={setBooking} />
+          </section>
+        )}
+
+        <article className="card p-5">
+          <h2 className="text-xl font-bold">Choose Date & Time</h2>
+          <p className="mt-1 text-sm text-slate-500">
+            {needsSchedule
+              ? "After you confirm in the picker above, your schedule appears here."
+              : "Schedule is set from the top booking picker or the calendar above. You can only choose quantity here."}
+          </p>
+          <div className="mt-4 space-y-3">
+            <div className="input-on-light bg-slate-50/90">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Date</p>
+              <p className="mt-1 font-medium text-slate-900">{booking.rentalDate || "Not selected"}</p>
+            </div>
+            <div className="input-on-light bg-slate-50/90">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Start Time</p>
+              <p className="mt-1 font-medium text-slate-900">{formatTime12(booking.startTime)}</p>
+            </div>
+            <div className="input-on-light bg-slate-50/90">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">End Time</p>
+              <p className="mt-1 font-medium text-slate-900">{formatTime12(booking.endTime)}</p>
+            </div>
+            <input
+              type="number"
+              min={1}
+              className="input-on-light"
+              value={form.quantity}
+              onChange={(e) => setForm((v) => ({ ...v, quantity: Number(e.target.value || 1) }))}
+            />
           </div>
-          <div className="input-on-light bg-slate-50/90">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Start Time</p>
-            <p className="mt-1 font-medium text-slate-900">{formatTime12(booking.startTime)}</p>
-          </div>
-          <div className="input-on-light bg-slate-50/90">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">End Time</p>
-            <p className="mt-1 font-medium text-slate-900">{formatTime12(booking.endTime)}</p>
-          </div>
-          <input
-            type="number"
-            min={1}
-            className="input-on-light"
-            value={form.quantity}
-            onChange={(e) => setForm((v) => ({ ...v, quantity: Number(e.target.value || 1) }))}
-          />
-        </div>
-        {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
-        <button type="button" onClick={addToCart} className="btn-gradient mt-4 w-full py-2.5">
-          Add to Cart
-        </button>
-      </article>
+          {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
+          <button type="button" onClick={addToCart} className="btn-gradient mt-4 w-full py-2.5">
+            Add to Cart
+          </button>
+        </article>
+      </div>
     </div>
   );
 }
